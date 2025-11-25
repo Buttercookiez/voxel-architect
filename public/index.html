@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Quota Safe</title>
+    <title>Voxel Architect | Auto-Fixing</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -43,7 +43,7 @@
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* STATUS NOTIFICATION */
+        /* NOTIFICATIONS */
         #status-toast {
             position: absolute; top: 20px; right: 20px; 
             background: #111; color: #fff; font-family: monospace; font-size: 12px;
@@ -52,7 +52,7 @@
             white-space: pre-wrap; word-wrap: break-word;
         }
         .error-toast { border-left-color: #ff4444 !important; background: #220000 !important; }
-        .warn-toast { border-left-color: #ffaa00 !important; background: #221a00 !important; }
+        .retry-toast { border-left-color: #ffaa00 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -62,13 +62,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Quota-Safe Mode (Flash 1.5)</p>
+        <p>Auto-Correcting AI</p>
     </div>
 
-    <div id="status-toast">Initializing...</div>
+    <div id="status-toast">System Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Block" placeholder="Type object..." spellcheck="false">
+        <input type="text" id="input-text" value="Orange Fox" placeholder="Type object (e.g. Burger)" spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -77,6 +77,7 @@
     </div>
 
     <script>
+        // YOUR API KEY (Hardcoded for you)
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
 
         // --- CONFIG ---
@@ -144,6 +145,7 @@
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
+            // Quick checks for hardcoded
             const isPreset = ['block','cube','box'].some(k => txt.toLowerCase() === k);
             if (!isPreset) await generateWithAI(txt); else generateInternal(txt);
         }
@@ -151,10 +153,9 @@
         function showToast(msg, type = 'success') {
             const el = document.getElementById('status-toast');
             el.innerText = msg;
-            el.className = type === 'error' ? 'error-toast' : (type === 'warn' ? 'warn-toast' : '');
+            el.className = type === 'error' ? 'error-toast' : (type === 'retry' ? 'retry-toast' : '');
             el.style.display = 'block';
-            // Don't auto hide errors
-            if(type !== 'error') setTimeout(() => el.style.display = 'none', 4000);
+            if(type === 'success') setTimeout(() => el.style.display = 'none', 4000);
         }
 
         function generateInternal(type) {
@@ -164,105 +165,142 @@
             processTargets(targets);
         }
 
-        // --- QUOTA SAFE AI REQUEST ---
+        // --- AUTO-FIXING AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
             loader.style.display = 'block';
             btnSpan.style.display = 'none';
 
-            try {
-                // STRICTLY USE GEMINI 1.5 FLASH (Highest Free Limit)
-                // Do not use 'pro' or 'exp' models.
-                const modelName = "gemini-1.5-flash"; 
+            // LIST OF ALL POSSIBLE MODEL NAMES (Prioritizing stability)
+            const MODEL_CANDIDATES = [
+                "gemini-1.5-flash-latest", // Attempt Newest
+                "gemini-1.5-flash-002",    // Attempt Specific V2
+                "gemini-1.5-flash-001",    // Attempt Specific V1
+                "gemini-1.5-flash",        // Attempt Generic Alias
+                "gemini-1.5-pro-latest",
+                "gemini-pro"               // Final Legacy fallback
+            ];
+
+            let success = false;
+            let lastError = "";
+
+            for(let i=0; i<MODEL_CANDIDATES.length; i++) {
+                const currentModel = MODEL_CANDIDATES[i];
                 
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
-                
-                const systemPrompt = `
-                    Build 3D object: "${prompt}".
-                    RULES:
-                    1. Build the PHYSICAL OBJECT (not text).
-                    2. JSON ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
-                    3. Size 12x12x12.
-                `;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: systemPrompt }] }],
-                        generationConfig: { 
-                            temperature: 0.4, 
-                            maxOutputTokens: 2000 // Low token count to save quota
-                        },
-                        // Disable safety to avoid false blockings
-                        safetySettings: [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ]
-                    })
-                });
-
-                if (!response.ok) {
-                    // Handle Quota Errors Specifically
-                    if(response.status === 429) {
-                        throw new Error("Quota Limit Hit. Please wait 1 minute.");
-                    }
-                    if(response.status === 404) {
-                        throw new Error("Model version not found. Google API changed.");
-                    }
-                    const errData = await response.json();
-                    throw new Error(errData.error?.message || response.statusText);
-                }
-
-                const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("No content.");
-
-                let text = data.candidates[0].content.parts[0].text;
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const first = text.indexOf('[');
-                const last = text.lastIndexOf(']');
-                if(first !== -1 && last !== -1) text = text.substring(first, last+1);
-
-                const voxelData = JSON.parse(text);
-                
-                if(Array.isArray(voxelData)) {
-                    const targets = voxelData.map(v => ({
-                        x: v.x||0, y: v.y||0, z: v.z||0,
-                        c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
-                    }));
-                    if(targets.length === 0) throw new Error("Empty model.");
+                try {
+                    // Don't spam toast, just log console
+                    console.log(`Attempting connection via: ${currentModel}`);
                     
-                    showToast(`Built: ${prompt}`);
-                    processTargets(targets);
-                } else {
-                    throw new Error("Invalid JSON.");
-                }
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${API_KEY}`;
+                    
+                    const systemPrompt = `
+                        You are a 3D Voxel Artist.
+                        User wants: "${prompt}".
+                        
+                        CRITICAL INSTRUCTION:
+                        DO NOT create text or letters.
+                        Create the ACTUAL PHYSICAL OBJECT/CREATURE.
+                        
+                        Format: ONLY a raw JSON Array of voxels.
+                        Schema: [{"x": int, "y": int, "z": int, "c": "hexString"}]
+                        Constraints: Approx 12x12x12 blocks. High detail.
+                    `;
 
-            } catch (e) {
-                console.error(e);
-                showToast(`FAILED: ${e.message}`, 'error');
-                // Fallback to internal so screen isn't empty
-                generateInternal("block"); 
-            } finally {
-                loader.style.display = 'none';
-                btnSpan.style.display = 'block';
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: systemPrompt }] }],
+                            generationConfig: { 
+                                temperature: 0.4, 
+                                maxOutputTokens: 2000 
+                            },
+                            safetySettings: [
+                                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                            ]
+                        })
+                    });
+
+                    // Handle Errors
+                    if (!response.ok) {
+                        const status = response.status;
+                        if (status === 404) {
+                            // Model version mismatch, throw specific error to continue loop
+                            throw new Error("VERSION_MISMATCH"); 
+                        } else if (status === 429) {
+                            throw new Error("QUOTA_EXCEEDED");
+                        }
+                        const errData = await response.json();
+                        throw new Error(errData.error?.message || "API Error");
+                    }
+
+                    const data = await response.json();
+                    if (!data.candidates || !data.candidates[0].content) throw new Error("EMPTY_RESPONSE");
+
+                    // Parse Response
+                    let text = data.candidates[0].content.parts[0].text;
+                    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    
+                    // Robust Extractor
+                    const first = text.indexOf('[');
+                    const last = text.lastIndexOf(']');
+                    if(first === -1 || last === -1) throw new Error("INVALID_JSON_FORMAT");
+                    text = text.substring(first, last+1);
+
+                    const voxelData = JSON.parse(text);
+                    
+                    if(Array.isArray(voxelData) && voxelData.length > 0) {
+                        // Data Validation
+                        const targets = voxelData.map(v => ({
+                            x: v.x||0, y: v.y||0, z: v.z||0,
+                            c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
+                        }));
+                        
+                        showToast(`Built with: ${currentModel}`, 'success');
+                        processTargets(targets);
+                        success = true;
+                        break; // EXIT LOOP - WE ARE DONE
+                    } else {
+                        throw new Error("EMPTY_DATA_ARRAY");
+                    }
+
+                } catch (e) {
+                    lastError = e.message;
+                    // If version mismatch, continue loop silentlhy
+                    if(e.message === "VERSION_MISMATCH") continue; 
+                    
+                    console.warn(`Failed on ${currentModel}: ${e.message}`);
+                    if(e.message === "QUOTA_EXCEEDED") break; // Don't retry if we have no quota
+                }
             }
+
+            if (!success) {
+                showToast(`Failed: ${lastError}`, 'error');
+                // Immediate Fallback so screen isn't black
+                generateInternal("block"); 
+            }
+            
+            loader.style.display = 'none';
+            btnSpan.style.display = 'block';
         }
 
         function processTargets(targets) {
+            // Calculate Center
             let mx=0, my=0, mz=0;
             targets.forEach(t => { mx+=t.x; my+=t.y; mz+=t.z; });
             const cx = mx/targets.length, cy = my/targets.length, cz = mz/targets.length;
 
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5;
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; // Lift slightly above floor
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
+            // Pool Management
             if(particles.length === 0) {
                 for(let i=0; i<CONFIG.maxParticles; i++) {
                     particles.push({
@@ -272,6 +310,7 @@
                 }
             }
 
+            // Assign
             particles.forEach((p, i) => {
                 if(i < targets.length) {
                     p.target = targets[i];
