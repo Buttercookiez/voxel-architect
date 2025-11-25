@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Gemini 2.5</title>
+    <title>Voxel Architect | Gemini 2.5 Fixed</title>
     
-    <!-- Fonts & Style -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -13,12 +12,10 @@
         :root { --bg: #e8ebee; --panel: rgba(255, 255, 255, 0.98); --text: #1a1a1a; --accent: #111; }
         body { margin: 0; overflow: hidden; background-color: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
         
-        /* UI Header */
         #header { position: absolute; top: 40px; left: 40px; pointer-events: none; z-index: 10; }
         h1 { margin: 0; font-size: 28px; font-weight: 800; text-transform: uppercase; color: var(--accent); letter-spacing: -1px; }
         p { margin: 4px 0 0; font-size: 14px; color: #666; font-weight: 500; }
 
-        /* Controls Container */
         #ui-container {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
@@ -39,30 +36,25 @@
             transition: transform 0.1s;
         }
         button:active { transform: scale(0.95); }
-        
         #btn-gen { background-color: var(--accent); color: white; }
         #btn-break { background-color: transparent; color: var(--text); border: 1px solid transparent; }
-        #btn-break:hover { background-color: rgba(0,0,0,0.05); }
         
-        /* Loading Spinner */
         .loader {
             width: 16px; height: 16px; border: 2px solid #fff; border-bottom-color: transparent;
             border-radius: 50%; display: none; animation: rotation 0.6s linear infinite;
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Notifications */
         #status-toast {
             position: absolute; top: 30px; right: 30px; 
             background: #1a1a1a; color: #fff; font-family: monospace; font-size: 13px;
             padding: 16px 20px; border-radius: 12px; z-index: 200; display: none;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2); border-left: 4px solid #00ff00;
-            max-width: 350px; line-height: 1.4;
+            max-width: 400px; line-height: 1.4;
         }
         .error-toast { border-left-color: #ff4444 !important; }
     </style>
 
-    <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
@@ -70,13 +62,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Running Gemini 2.5 Flash</p>
+        <p>Powered by Gemini 2.5 Flash</p>
     </div>
 
     <div id="status-toast">Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Block" placeholder="Try: Red Dragon..." spellcheck="false">
+        <input type="text" id="input-text" value="Block" placeholder="Try: Red Apple" spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -86,16 +78,13 @@
 
     <script>
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
-        
-        // --- MODEL CONFIGURATION ---
-        const ACTIVE_MODEL = "gemini-2.5-flash"; // THE WORKING MODEL
+        const TARGET_MODEL = "gemini-2.5-flash"; // Proven working in diagnostics
 
         const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
 
-        // --- INITIALIZATION ---
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(CONFIG.bg);
@@ -117,7 +106,6 @@
             controls.autoRotateSpeed = 1.0;
             controls.enableDamping = true;
 
-            // Studio Lights
             const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.65);
             const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.2);
             keyLight.position.set(20, 40, 20);
@@ -150,18 +138,15 @@
             document.getElementById('btn-gen').onclick = handleGenerate;
             document.getElementById('btn-break').onclick = shatter;
 
-            // Build initial block
-            generateInternal('Block');
+            generateInternal();
             animate();
         }
 
-        // --- MAIN HANDLER ---
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
-            // Hardcoded local presets to save quota
             const isPreset = ['block','cube'].some(k => txt.toLowerCase() === k);
-            if (!isPreset) await generateWithAI(txt); else generateInternal(txt);
+            if (!isPreset) await generateWithAI(txt); else generateInternal();
         }
 
         function showToast(msg, isError = false) {
@@ -169,8 +154,7 @@
             el.innerText = msg;
             el.className = isError ? 'error-toast' : '';
             el.style.display = 'block';
-            // Keep errors on screen longer
-            setTimeout(() => el.style.display = 'none', isError ? 6000 : 4000);
+            setTimeout(() => el.style.display = 'none', isError ? 6000 : 3000);
         }
 
         function generateInternal() {
@@ -180,7 +164,7 @@
             processTargets(targets);
         }
 
-        // --- AI LOGIC (GEMINI 2.5 FLASH) ---
+        // --- AI GENERATION ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -188,20 +172,18 @@
             btnSpan.style.display = 'none';
 
             try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${ACTIVE_MODEL}:generateContent?key=${API_KEY}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${TARGET_MODEL}:generateContent?key=${API_KEY}`;
                 
-                // ENHANCED SYSTEM PROMPT to prevent text rendering
                 const systemPrompt = `
-                    Act as a 3D Voxel Printer.
-                    Goal: Generate a 3D representation of "${prompt}".
+                    Role: You are a specialized 3D Voxel Printing Software.
+                    Goal: Create a 3D voxel model of "${prompt}".
                     
                     STRICT RULES:
-                    1. Output ONLY a JSON Array. No markdown, no text.
-                    2. JSON Format: [{"x":0,"y":0,"z":0,"c":"#FF0000"}, ...]
-                    3. DO NOT BUILD LETTERS. If the prompt is "Apple", build the fruit, NOT the word.
-                    4. Use a wide variety of colors (hex codes).
-                    5. Keep the structure solid and dense.
-                    6. Approximate dimensions: 14x14x14 voxels.
+                    1. NO TEXT. Do NOT build letters. If prompt is "Car", build a physical car.
+                    2. NO MARKDOWN. Output ONLY valid JSON array.
+                    3. JSON FORMAT: [{"x":0,"y":0,"z":0,"c":"#FF0000"}]
+                    4. SCALE: Approx 12x12x12.
+                    5. COLOR: Use hex colors representing the object.
                 `;
 
                 const response = await fetch(url, {
@@ -210,41 +192,48 @@
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
-                            temperature: 0.3, 
-                            maxOutputTokens: 4000
+                            temperature: 0.4, 
+                            maxOutputTokens: 5000 // Reduced for stability
                         },
-                        safetySettings: [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ]
+                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
                     })
                 });
 
                 if (!response.ok) {
                     const err = await response.json();
-                    throw new Error(err.error?.message || "API Request Failed");
+                    throw new Error(err.error?.message || "Connection Refused");
                 }
 
                 const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("Empty AI response.");
+                
+                if (!data.candidates || !data.candidates[0].content) {
+                    throw new Error("AI blocked content or returned empty.");
+                }
 
                 let text = data.candidates[0].content.parts[0].text;
                 
-                // Clean possible markdown ```json ... ```
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const first = text.indexOf('[');
-                const last = text.lastIndexOf(']');
+                // === AGGRESSIVE CLEANER ===
+                // 1. Find first bracket [
+                const firstChar = text.indexOf('[');
+                if (firstChar === -1) throw new Error("AI response wasn't a list.");
                 
-                if (first === -1 || last === -1) throw new Error("AI returned invalid data (not an array).");
-                
-                text = text.substring(first, last+1);
+                // 2. Find last bracket ]
+                const lastChar = text.lastIndexOf(']');
+                if (lastChar === -1) throw new Error("Incomplete AI response.");
 
-                const voxelData = JSON.parse(text);
+                // 3. Slice only the JSON part
+                const cleanedText = text.substring(firstChar, lastChar + 1);
+
+                let voxelData;
+                try {
+                    voxelData = JSON.parse(cleanedText);
+                } catch (parseErr) {
+                    console.error("Bad JSON String:", cleanedText);
+                    throw new Error("JSON Syntax Error (AI output corrupted)");
+                }
                 
                 if (Array.isArray(voxelData) && voxelData.length > 0) {
-                    // Data formatting
+                    // Transform Hex string to Int for Three.js
                     const targets = voxelData.map(v => ({
                         x: parseInt(v.x)||0, 
                         y: parseInt(v.y)||0, 
@@ -252,15 +241,16 @@
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
                     
-                    showToast(`Generated: ${prompt}`);
+                    showToast(`Success: ${prompt}`);
                     processTargets(targets);
                 } else {
-                    throw new Error("AI returned an empty structure.");
+                    throw new Error("Received valid JSON, but empty data.");
                 }
 
             } catch (e) {
                 console.error(e);
                 showToast(`Failed: ${e.message}`, true);
+                // Fallback to a procedural box so screen isn't empty
                 generateInternal(); 
             } finally {
                 loader.style.display = 'none';
@@ -268,35 +258,31 @@
             }
         }
 
-        // --- VISUALIZATION CORE ---
         function processTargets(targets) {
             let mx=0, my=0, mz=0;
             targets.forEach(t => { mx+=t.x; my+=t.y; mz+=t.z; });
             const cx = mx/targets.length, cy = my/targets.length, cz = mz/targets.length;
 
-            // Shift Voxels to Center and Up
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; // +5 floats it above floor
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5;
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
-            // Fill particle pool if empty
             if(particles.length === 0) {
                 for(let i=0; i<CONFIG.maxParticles; i++) {
                     particles.push({
                         x: (Math.random()-0.5)*20, y: CONFIG.floorY+0.5, z: (Math.random()-0.5)*20,
-                        rx: 0, c: 0xcfd8dc, state: 'FLOOR', vx:0, vy:0, vz:0
+                        rx: Math.random()*Math.PI, c: 0xcfd8dc, state: 'FLOOR', vx:0, vy:0, vz:0
                     });
                 }
             }
 
-            // Assign jobs
             particles.forEach((p, i) => {
                 if(i < targets.length) {
                     p.target = targets[i];
                     p.state = 'FLYING';
-                    p.delay = (targets[i].y * 1.5) + Math.random()*5; // Animation Sequence
+                    p.delay = (targets[i].y * 1.5) + Math.random()*5; 
                 } else {
                     p.state = 'FLOOR';
                 }
@@ -323,7 +309,6 @@
             const count = Math.min(particles.length, CONFIG.maxParticles);
             mesh.count = count;
             
-            // Physics constants
             const G=-0.05, F=0.95; 
 
             for(let i=0; i<count; i++) {
@@ -331,25 +316,23 @@
                 if(p.state==='FLYING') {
                     if(p.delay>0) {
                         p.delay--;
-                        // Little jitter while waiting on floor
                         if(p.y < CONFIG.floorY+2) p.rx += 0.1; 
                     } else {
                         const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
                         p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed;
-                        p.rx*=0.7; // Smooth rotation to zero
+                        p.rx*=0.7; 
                         if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1) {
                             p.state='ASSEMBLED'; 
                             p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; 
                             p.c=p.target.c; p.rx=0;
                         } else {
-                            p.c=p.target.c; // Turn color mid-flight
+                            p.c=p.target.c; 
                         }
                     }
                 } else if(p.state==='ASSEMBLED') {
                     p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
                 } else if(p.state==='FALLING') {
                     p.vy+=G; p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.rx+=p.vrx;
-                    // Floor Bounce
                     if(p.y<CONFIG.floorY+0.5) { 
                         p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; 
                         if(Math.abs(p.vy)<0.1) p.state='FLOOR'; 
