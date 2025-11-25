@@ -3,30 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Stable Core</title>
+    <title>Voxel Architect | Elegant Mode</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
     <style>
-        :root { --bg: #e8ebee; --panel: rgba(255, 255, 255, 0.98); --text: #1a1a1a; --accent: #111; }
+        :root { --bg: #e0e5ec; --panel: rgba(255, 255, 255, 0.98); --text: #1a1a1a; --accent: #111; }
         body { margin: 0; overflow: hidden; background-color: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
         
         #header { position: absolute; top: 40px; left: 40px; pointer-events: none; z-index: 10; }
-        h1 { margin: 0; font-size: 28px; font-weight: 800; text-transform: uppercase; color: var(--accent); letter-spacing: -1px; }
-        p { margin: 4px 0 0; font-size: 14px; color: #666; font-weight: 500; }
+        h1 { margin: 0; font-size: 32px; font-weight: 800; text-transform: uppercase; color: var(--accent); letter-spacing: -1.5px; }
+        p { margin: 4px 0 0; font-size: 14px; color: #555; font-weight: 500; }
 
         #ui-container {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-            background: var(--panel); backdrop-filter: blur(20px); border-radius: 18px;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.1); z-index: 100;
-            border: 1px solid rgba(255,255,255,0.5);
+            background: var(--panel); backdrop-filter: blur(20px); border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1); z-index: 100; border: 1px solid rgba(255,255,255,0.5);
         }
         
         input {
             border: none; background: rgba(0,0,0,0.05); padding: 14px 18px; border-radius: 10px;
-            font-size: 16px; font-weight: 600; width: 220px; outline: none; transition: 0.2s;
+            font-size: 16px; font-weight: 600; width: 250px; outline: none; transition: 0.2s;
         }
         input:focus { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
 
@@ -41,15 +40,15 @@
         
         .loader {
             width: 16px; height: 16px; border: 2px solid #fff; border-bottom-color: transparent;
-            border-radius: 50%; display: none; animation: rotation 0.6s linear infinite;
+            border-radius: 50%; display: none; animation: rotation 0.8s linear infinite;
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         #status-toast {
             position: absolute; top: 30px; right: 30px; 
-            background: #1a1a1a; color: #fff; font-family: monospace; font-size: 13px;
+            background: #111; color: #fff; font-family: monospace; font-size: 13px;
             padding: 16px 20px; border-radius: 12px; z-index: 200; display: none;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2); border-left: 4px solid #00ff00;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); border-left: 4px solid #00ff00;
             max-width: 400px; line-height: 1.4;
         }
         .error-toast { border-left-color: #ff4444 !important; }
@@ -62,13 +61,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Gemini 2.5 (Stable)</p>
+        <p>Gemini 2.5 | Slow Motion Build</p>
     </div>
 
     <div id="status-toast">Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Fox" placeholder="Type: Fox, Car, Castle..." spellcheck="false">
+        <input type="text" id="input-text" value="Fox" placeholder="Type object..." spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -80,7 +79,9 @@
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
         const MODEL = "gemini-2.5-flash";
 
-        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
+        // --- SLOW ANIMATION CONFIG ---
+        // animSpeed lowered from 0.2 to 0.03 for very slow floating
+        const CONFIG = { bg: 0xe0e5ec, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 12000, animSpeed: 0.03 };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
@@ -88,10 +89,10 @@
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(CONFIG.bg);
-            scene.fog = new THREE.Fog(CONFIG.bg, 30, 100);
+            scene.fog = new THREE.Fog(CONFIG.bg, 30, 120);
             
-            camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.set(30, 25, 30);
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 2000);
+            camera.position.set(35, 25, 35); // Adjusted camera for better angle
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -103,18 +104,20 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.autoRotate = true;
-            controls.autoRotateSpeed = 1.0;
+            controls.autoRotateSpeed = 0.8; // Slower idle spin
             controls.enableDamping = true;
 
-            const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.65);
-            const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.2);
-            keyLight.position.set(20, 40, 20);
+            // Cinematic Lighting
+            const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+            const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.4);
+            keyLight.position.set(20, 50, 20);
             keyLight.castShadow = true;
-            keyLight.shadow.mapSize.width = 2048; 
-            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.mapSize.width = 4096; 
+            keyLight.shadow.mapSize.height = 4096;
             scene.add(hemi); scene.add(keyLight);
             
-            const planeGeo = new THREE.PlaneGeometry(200, 200);
+            // Shadow Floor
+            const planeGeo = new THREE.PlaneGeometry(300, 300);
             const planeMat = new THREE.ShadowMaterial({ opacity: 0.15 });
             const plane = new THREE.Mesh(planeGeo, planeMat);
             plane.rotation.x = -Math.PI / 2;
@@ -145,7 +148,7 @@
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
-            const isPreset = ['block','cube'].some(k => txt.toLowerCase() === k);
+            const isPreset = ['block','cube','box'].some(k => txt.toLowerCase() === k);
             if (!isPreset) await generateWithAI(txt); else generateInternal();
         }
 
@@ -164,7 +167,7 @@
             processTargets(targets);
         }
 
-        // --- AI LOGIC ---
+        // --- AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -175,15 +178,15 @@
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    You are a specialized 3D Voxel Printing Software.
-                    Create: "${prompt}".
+                    You are a 3D Voxel Artist.
+                    User wants: "${prompt}".
                     
-                    CRITICAL INSTRUCTIONS:
-                    1. Output strictly valid JSON array.
-                    2. Format: [{"x":0,"y":0,"z":0,"c":"#FF0000"}]
-                    3. Do NOT create text/letters. Build the actual physical object (e.g. wheels on a car, leaves on a tree).
-                    4. Scale: Approx 12x12x12.
-                    5. NO MARKDOWN. NO "\`\`\`". Just the array.
+                    Instructions:
+                    1. Return raw JSON Array ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
+                    2. No text labels. Build the OBJECT.
+                    3. DO NOT SWAP AXES. Y is Up.
+                    4. Use varied, vibrant colors.
+                    5. Max dimensions 16x16x16.
                 `;
 
                 const response = await fetch(url, {
@@ -193,63 +196,45 @@
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
                             temperature: 0.3, 
-                            maxOutputTokens: 30000 // MAXIMIZED TOKENS to prevent cutoff
+                            maxOutputTokens: 30000 // High limit for complex models
                         },
-                        safetySettings: [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ]
+                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
                     })
                 });
 
                 if (!response.ok) {
                     const err = await response.json();
-                    throw new Error(err.error?.message || `Error ${response.status}`);
+                    throw new Error(err.error?.message || "API Error");
                 }
 
                 const data = await response.json();
-                
-                // FIX 1: Validate candidate existence before reading [0]
-                if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content) {
-                    throw new Error("AI blocked the request (Empty Candidate).");
-                }
+                if (!data.candidates || !data.candidates[0].content) throw new Error("Empty AI response.");
 
                 let text = data.candidates[0].content.parts[0].text;
-                
-                // FIX 2: Robust Cleaner (Handles backticks, text prefix, etc.)
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 
-                // Extract pure array
                 const first = text.indexOf('[');
                 const last = text.lastIndexOf(']');
                 
-                if (first === -1 || last === -1) {
-                    console.log("Raw output:", text); // Log for debugging
-                    throw new Error("AI didn't return an array.");
-                }
-                
-                const cleanJson = text.substring(first, last+1);
+                if (first === -1 || last === -1) throw new Error("AI data corrupted.");
+                text = text.substring(first, last+1);
 
-                // FIX 3: Try Parse
-                let voxelData;
-                try {
-                    voxelData = JSON.parse(cleanJson);
-                } catch (e) {
-                    console.warn("Bad JSON, attempting internal fallback", e);
-                    throw new Error("JSON Syntax Error (Model output was messy)");
-                }
+                let voxelData = JSON.parse(text);
                 
                 if (Array.isArray(voxelData) && voxelData.length > 0) {
                     const targets = voxelData.map(v => ({
-                        x: parseInt(v.x)||0, y: parseInt(v.y)||0, z: parseInt(v.z)||0,
+                        // --- FIX FOR SIDEWAYS: ENSURE Y IS UP ---
+                        // Gemini often uses Y as vertical correctly, but if it flips, swap here.
+                        // Current standard: Three.js Y=Up.
+                        x: parseInt(v.x)||0, 
+                        y: parseInt(v.y)||0,  // Y is height
+                        z: parseInt(v.z)||0,  // Z is depth
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
-                    showToast(`Built: ${prompt}`);
+                    showToast(`Generated: ${prompt}`);
                     processTargets(targets);
                 } else {
-                    throw new Error("Array empty or invalid.");
+                    throw new Error("Empty data array.");
                 }
 
             } catch (e) {
@@ -263,30 +248,37 @@
         }
 
         function processTargets(targets) {
+            // Center object
             let mx=0, my=0, mz=0;
             targets.forEach(t => { mx+=t.x; my+=t.y; mz+=t.z; });
             const cx = mx/targets.length, cy = my/targets.length, cz = mz/targets.length;
 
+            // Map targets to World Coordinates
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; 
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; // +5 height
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
+            // Ensure we have particles
             if(particles.length === 0) {
                 for(let i=0; i<CONFIG.maxParticles; i++) {
                     particles.push({
-                        x: (Math.random()-0.5)*20, y: CONFIG.floorY+0.5, z: (Math.random()-0.5)*20,
-                        rx: Math.random()*Math.PI, c: 0xcfd8dc, state: 'FLOOR', vx:0, vy:0, vz:0
+                        x: (Math.random()-0.5)*30, y: CONFIG.floorY+0.5, z: (Math.random()-0.5)*30,
+                        rx: 0, c: 0xcfd8dc, state: 'FLOOR', vx:0, vy:0, vz:0
                     });
                 }
             }
 
+            // Assign new targets
             particles.forEach((p, i) => {
                 if(i < targets.length) {
                     p.target = targets[i];
                     p.state = 'FLYING';
-                    p.delay = (targets[i].y * 1.5) + Math.random()*5; 
+                    
+                    // SLOW SEQUENCE: Height based delay
+                    // Multiply by 10 makes it take much longer to start rising
+                    p.delay = (targets[i].y * 15) + Math.random()*20; 
                 } else {
                     p.state = 'FLOOR';
                 }
@@ -299,7 +291,10 @@
             particles.forEach(p => {
                 if(p.state === 'ASSEMBLED' || p.state === 'FLYING') {
                     p.state = 'FALLING';
-                    p.vx=(Math.random()-0.5)*1.5; p.vy=Math.random()*1.5; p.vz=(Math.random()-0.5)*1.5; p.vrx=(Math.random()-0.5)*0.5;
+                    p.vx=(Math.random()-0.5)*1.0;
+                    p.vy=Math.random()*1.2; 
+                    p.vz=(Math.random()-0.5)*1.0;
+                    p.vrx=(Math.random()-0.5)*0.5;
                 }
             });
         }
@@ -307,29 +302,71 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
-            const count = Math.min(particles.length, CONFIG.maxParticles);
-            mesh.count = count;
             
-            const G=-0.05, F=0.95; 
+            mesh.count = Math.min(particles.length, CONFIG.maxParticles);
+            
+            // Physics settings
+            const G = -0.03; // Slower gravity
+            const F = 0.95; 
 
-            for(let i=0; i<count; i++) {
+            for(let i=0; i<mesh.count; i++) {
                 const p = particles[i];
+                
                 if(p.state==='FLYING') {
-                    if(p.delay>0) { p.delay--; if(p.y < CONFIG.floorY+2) p.rx += 0.2; } 
+                    if(p.delay > 0) { 
+                        p.delay--; 
+                        // Slight floor vibration while waiting
+                        if(p.y < CONFIG.floorY+2) { p.rx += 0.05; }
+                    } 
                     else {
-                        const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
-                        p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed;
-                        p.rx*=0.7;
-                        if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1) {
-                            p.state='ASSEMBLED'; p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; p.c=p.target.c; p.rx=0;
-                        } else p.c=p.target.c;
+                        // Interpolation to target (Magnetic Fly)
+                        const dx = p.target.wx - p.x;
+                        const dy = p.target.wy - p.y;
+                        const dz = p.target.wz - p.z;
+                        
+                        // Move towards target slowly (Lerp)
+                        p.x += dx * CONFIG.animSpeed;
+                        p.y += dy * CONFIG.animSpeed;
+                        p.z += dz * CONFIG.animSpeed;
+                        
+                        p.rx *= 0.9; // Dampen rotation
+
+                        // Check if arrived
+                        const dist = Math.abs(dx)+Math.abs(dy)+Math.abs(dz);
+                        if(dist < 0.1) {
+                            p.state='ASSEMBLED'; 
+                            // Snap perfectly
+                            p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; 
+                            p.c=p.target.c; p.rx=0;
+                        } else {
+                            // Change color to target mid-flight for effect
+                            p.c=p.target.c; 
+                        }
                     }
-                } else if(p.state==='ASSEMBLED') {
+                } 
+                else if(p.state==='ASSEMBLED') {
+                    // Lock position
                     p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
-                } else if(p.state==='FALLING') {
-                    p.vy+=G; p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.rx+=p.vrx;
-                    if(p.y<CONFIG.floorY+0.5) { p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; if(Math.abs(p.vy)<0.1)p.state='FLOOR'; }
-                } else if(p.state==='FLOOR') { p.y=CONFIG.floorY+0.5; }
+                } 
+                else if(p.state==='FALLING') {
+                    p.vy += G; 
+                    p.x += p.vx; 
+                    p.y += p.vy; 
+                    p.z += p.vz; 
+                    p.rx += p.vrx;
+                    
+                    // Bounce off floor
+                    if(p.y < CONFIG.floorY+0.5) { 
+                        p.y = CONFIG.floorY+0.5; 
+                        p.vy *= -0.6; 
+                        p.vx *= F; 
+                        p.vz *= F; 
+                        if(Math.abs(p.vy) < 0.1) p.state='FLOOR'; 
+                    }
+                } 
+                else if(p.state==='FLOOR') {
+                    p.y = CONFIG.floorY+0.5;
+                }
 
                 dummy.position.set(p.x, p.y, p.z);
                 dummy.rotation.set(p.rx, p.rx, p.rx);
@@ -337,6 +374,7 @@
                 mesh.setMatrixAt(i, dummy.matrix);
                 mesh.setColorAt(i, colorHelper.setHex(p.c));
             }
+            
             mesh.instanceMatrix.needsUpdate = true;
             mesh.instanceColor.needsUpdate = true;
             renderer.render(scene, camera);
