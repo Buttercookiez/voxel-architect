@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | JSON Mode</title>
+    <title>Voxel Architect | Vacuum Mode</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -50,9 +50,10 @@
             background: #1a1a1a; color: #fff; font-family: monospace; font-size: 13px;
             padding: 16px 20px; border-radius: 12px; z-index: 200; display: none;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2); border-left: 4px solid #00ff00;
-            max-width: 350px; line-height: 1.4;
+            max-width: 400px; line-height: 1.4;
         }
         .error-toast { border-left-color: #ff4444 !important; }
+        .retry-toast { border-left-color: #ffaa00 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -62,13 +63,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Structure Mode (No Text)</p>
+        <p>Stream Vacuum Mode</p>
     </div>
 
     <div id="status-toast">Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Fox" placeholder="Type: Fox, Car, Tree..." spellcheck="false">
+        <input type="text" id="input-text" value="Blue Castle" placeholder="Type: Red Car..." spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -78,9 +79,9 @@
 
     <script>
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
-        const MODEL = "gemini-2.5-flash"; // The one that worked in your test
+        const MODEL = "gemini-2.5-flash";
 
-        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
+        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 12000, animSpeed: 0.2 };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
@@ -110,7 +111,8 @@
             const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.2);
             keyLight.position.set(20, 40, 20);
             keyLight.castShadow = true;
-            keyLight.shadow.mapSize.width = 2048; keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.mapSize.width = 2048; 
+            keyLight.shadow.mapSize.height = 2048;
             scene.add(hemi); scene.add(keyLight);
             
             const planeGeo = new THREE.PlaneGeometry(200, 200);
@@ -144,18 +146,19 @@
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
-            // Presets save time, otherwise AI
             const isPreset = ['block','cube'].some(k => txt.toLowerCase() === k);
             if (!isPreset) await generateWithAI(txt); else generateInternal();
         }
 
-        function showToast(msg, isError = false) {
+        function showToast(msg, type = 'success') {
             const el = document.getElementById('status-toast');
             el.innerText = msg;
-            el.className = isError ? 'error-toast' : '';
+            el.className = type === 'error' ? 'error-toast' : (type === 'retry' ? 'retry-toast' : '');
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', isError ? 6000 : 3000);
+            setTimeout(() => el.style.display = 'none', isError(type) ? 6000 : 3000);
         }
+        
+        function isError(t) { return t === 'error' || t === 'retry'; }
 
         function generateInternal() {
             let targets = [];
@@ -164,7 +167,7 @@
             processTargets(targets);
         }
 
-        // --- JSON MODE AI ---
+        // --- "VACUUM" AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -175,14 +178,12 @@
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    Task: Create a 3D voxel object of "${prompt}".
-                    
-                    Strict Guidelines:
-                    1. OBJECT ONLY. No text labels. If user types "Apple", build an apple shape.
-                    2. Output format is a flat JSON array of coordinates and colors.
-                    3. Example: [{"x":0, "y":0, "z":0, "c":"#FF0000"}, {"x":1, "y":0, "z":0, "c":"#00FF00"}]
-                    4. Use Hex colors.
-                    5. Scale: approx 14x14x14.
+                    Build a 3D voxel model of: "${prompt}".
+                    IMPORTANT:
+                    1. Use simple Hex color codes like "#FF0000".
+                    2. Structure format: {"x":0,"y":0,"z":0,"c":"#Hex"}
+                    3. Output specific voxel data objects in a row.
+                    4. No text labels.
                 `;
 
                 const response = await fetch(url, {
@@ -191,10 +192,10 @@
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
-                            temperature: 0.4, 
-                            maxOutputTokens: 8000,
-                            responseMimeType: "application/json" // <--- FORCE CLEAN JSON
-                        }
+                            temperature: 0.3, 
+                            maxOutputTokens: 8192 // High token limit for complex models
+                        },
+                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
                     })
                 });
 
@@ -202,28 +203,54 @@
 
                 const data = await response.json();
                 
-                if (!data.candidates || !data.candidates[0].content) throw new Error("No Content");
+                // Robust Safety/Empty Checks
+                if (!data || !data.candidates || !data.candidates[0]) throw new Error("No candidates returned.");
+                if (!data.candidates[0].content) throw new Error("Content filtered.");
 
                 let text = data.candidates[0].content.parts[0].text;
                 
-                // Parse
-                const voxelData = JSON.parse(text);
+                // --- THE VACUUM METHOD ---
+                // Instead of assuming valid JSON Array [ ... ], 
+                // we assume specific objects inside text and extract them using Regex.
+                // This works even if the string is truncated (broken at end).
                 
-                if (Array.isArray(voxelData) && voxelData.length > 0) {
-                    const targets = voxelData.map(v => ({
-                        x: v.x||0, y: v.y||0, z: v.z||0,
-                        c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
-                    }));
+                const voxelRegex = /\{\s*"?x"?\s*:\s*-?\d+\s*,\s*"?y"?\s*:\s*-?\d+\s*,\s*"?z"?\s*:\s*-?\d+\s*,\s*"?c"?\s*:\s*".*?"\s*\}/g;
+                
+                const matches = text.match(voxelRegex);
+
+                if (matches && matches.length > 0) {
                     
-                    showToast(`Built: ${prompt}`);
-                    processTargets(targets);
+                    // Convert strings to objects safely
+                    const targets = [];
+                    for (const match of matches) {
+                        try {
+                            // Using a lenient parse
+                            const v = JSON.parse(match);
+                            targets.push({
+                                x: v.x || 0,
+                                y: v.y || 0,
+                                z: v.z || 0,
+                                c: parseInt(((v.c || "#888").replace('#','0x')), 16)
+                            });
+                        } catch(e) { /* Skip bad pixel */ }
+                    }
+
+                    if (targets.length > 0) {
+                        showToast(`Built: ${prompt} (${targets.length} voxels)`);
+                        processTargets(targets);
+                    } else {
+                        throw new Error("Pattern match found no valid data.");
+                    }
+
                 } else {
-                    throw new Error("Data empty or invalid format.");
+                    // If regex fails, dump text for user debug in prompt logs (optional)
+                    console.warn("AI RAW OUTPUT:", text);
+                    throw new Error("AI spoke text, not code.");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Retry... Error: ${e.message}`, true);
+                showToast(`Fail: ${e.message}`, 'retry');
                 generateInternal();
             } finally {
                 loader.style.display = 'none';
