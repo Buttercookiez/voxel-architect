@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Object Mode</title>
+    <title>Voxel Architect | Instant Mode</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -39,7 +39,7 @@
         
         .loader {
             width: 14px; height: 14px; border: 2px solid #fff; border-bottom-color: transparent;
-            border-radius: 50%; display: none; animation: rotation 1s linear infinite;
+            border-radius: 50%; display: none; animation: rotation 0.5s linear infinite;
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -59,13 +59,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Powered by Google Gemini</p>
+        <p>Flash Mode</p>
     </div>
 
     <div id="status-toast">Initializing...</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Block" placeholder="Type shape (e.g. Fox)" spellcheck="false">
+        <input type="text" id="input-text" value="Block" placeholder="Type object (e.g. Car)" spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -74,11 +74,17 @@
     </div>
 
     <script>
-        // --- YOUR API KEY ---
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
 
-        // --- CONFIG ---
-        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.08 };
+        // --- TURBO CONFIGURATION (Animation speeds kept high) ---
+        const CONFIG = { 
+            bg: 0xe8ebee, 
+            floorY: -12, 
+            voxelSize: 1, 
+            gap: 0.02, 
+            maxParticles: 8000, 
+            animSpeed: 0.2 // Turbo Speed
+        };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
@@ -101,7 +107,7 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.autoRotate = true;
-            controls.autoRotateSpeed = 0.5;
+            controls.autoRotateSpeed = 2.0;
             controls.enableDamping = true;
 
             const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.65);
@@ -151,7 +157,7 @@
             el.innerText = msg;
             el.className = isError ? 'error-toast' : '';
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
+            setTimeout(() => el.style.display = 'none', 4000);
         }
 
         function generateInternal(type) {
@@ -161,25 +167,7 @@
             processTargets(targets);
         }
 
-        async function discoverModel() {
-            showToast("Connecting...");
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
-                if(!response.ok) throw new Error("API Access Check Failed");
-                const data = await response.json();
-                const models = data.models || [];
-                
-                let bestModel = models.find(m => m.name.includes("gemini-1.5-flash") && m.supportedGenerationMethods.includes("generateContent"));
-                if(!bestModel) bestModel = models.find(m => m.supportedGenerationMethods.includes("generateContent"));
-
-                if(bestModel) return bestModel.name.replace("models/", "");
-                throw new Error("No valid model found.");
-            } catch(e) {
-                console.warn("Auto-discovery failed, defaulting.");
-                return "gemini-1.5-flash";
-            }
-        }
-
+        // --- OPTIMIZED AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -187,36 +175,35 @@
             btnSpan.style.display = 'none';
 
             try {
-                const modelName = await discoverModel();
+                // Direct Call to Flash (Fastest Model)
+                const modelName = "gemini-1.5-flash"; 
                 
-                // --- UPDATED SYSTEM PROMPT TO FORCE OBJECTS NOT TEXT ---
-                const systemPrompt = `
-                    You are a 3D Voxel Modeler. 
-                    The user wants a 3D model of: "${prompt}".
-                    
-                    CRITICAL RULES:
-                    1. Do NOT build the letters of the word. Build the PHYSICAL OBJECT.
-                    2. If user types "Car", build a car with wheels, not the text "CAR".
-                    3. If user types "Tree", build a tree with trunk and leaves.
-                    4. Output JSON ONLY. Format: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
-                    5. Use vibrant colors. Keep size around 12x12x12.
-                `;
-
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
                 
+                const systemPrompt = `
+                    Build 3D object: "${prompt}".
+                    RULES:
+                    1. Build the physical object (e.g. if "Car", build a car).
+                    2. JSON ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
+                    3. Size 12x12x12.
+                `;
+
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: systemPrompt }] }],
-                        generationConfig: { temperature: 0.4, maxOutputTokens: 8000 }
+                        generationConfig: { 
+                            temperature: 0.4, 
+                            maxOutputTokens: 2000 // Lower tokens = Faster response
+                        }
                     })
                 });
 
-                if (!response.ok) throw new Error("API Request Failed");
+                if (!response.ok) throw new Error("Network/API Error");
 
                 const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("No content.");
+                if (!data.candidates || !data.candidates[0].content) throw new Error("No data");
 
                 let text = data.candidates[0].content.parts[0].text;
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -231,17 +218,17 @@
                         x: v.x||0, y: v.y||0, z: v.z||0,
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
-                    if(targets.length === 0) throw new Error("Empty model.");
+                    if(targets.length === 0) throw new Error("Empty");
                     
-                    showToast(`Built ${prompt}`);
+                    showToast(`Done!`);
                     processTargets(targets);
                 } else {
-                    throw new Error("Invalid JSON");
+                    throw new Error("Bad JSON");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Error: ${e.message}`, true);
+                showToast(`Error: Retrying internal`, true);
                 generateInternal("block"); 
             } finally {
                 loader.style.display = 'none';
@@ -273,7 +260,8 @@
                 if(i < targets.length) {
                     p.target = targets[i];
                     p.state = 'FLYING';
-                    p.delay = (targets[i].y * 3) + Math.random()*10;
+                    // Fast multiplier
+                    p.delay = (targets[i].y * 1) + Math.random()*5; 
                 } else {
                     p.state = 'FLOOR';
                 }
@@ -286,8 +274,10 @@
             particles.forEach(p => {
                 if(p.state === 'ASSEMBLED' || p.state === 'FLYING') {
                     p.state = 'FALLING';
-                    p.vx=(Math.random()-0.5); p.vy=Math.random(); p.vz=(Math.random()-0.5);
-                    p.vrx=(Math.random()-0.5)*0.2;
+                    p.vx=(Math.random()-0.5)*1.5;
+                    p.vy=Math.random()*1.5; 
+                    p.vz=(Math.random()-0.5)*1.5;
+                    p.vrx=(Math.random()-0.5)*0.5;
                 }
             });
         }
@@ -297,18 +287,18 @@
             controls.update();
             const count = Math.min(particles.length, CONFIG.maxParticles);
             mesh.count = count;
-            const G=-0.03, F=0.95;
+            const G=-0.05, F=0.95; 
 
             for(let i=0; i<count; i++) {
                 const p = particles[i];
                 if(p.state==='FLYING') {
                     if(p.delay>0) {
                         p.delay--;
-                        if(p.y < CONFIG.floorY+2) p.rx += 0.1;
+                        if(p.y < CONFIG.floorY+2) p.rx += 0.2;
                     } else {
                         const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
                         p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed;
-                        p.rx*=0.8;
+                        p.rx*=0.7;
                         if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1) {
                             p.state='ASSEMBLED'; p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; p.c=p.target.c; p.rx=0;
                         } else p.c=p.target.c;
@@ -317,7 +307,7 @@
                     p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
                 } else if(p.state==='FALLING') {
                     p.vy+=G; p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.rx+=p.vrx;
-                    if(p.y<CONFIG.floorY+0.5) { p.y=CONFIG.floorY+0.5; p.vy*=-0.5; p.vx*=F; p.vz*=F; if(Math.abs(p.vy)<0.05)p.state='FLOOR'; }
+                    if(p.y<CONFIG.floorY+0.5) { p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; if(Math.abs(p.vy)<0.1)p.state='FLOOR'; }
                 } else if(p.state==='FLOOR') p.y=CONFIG.floorY+0.5;
 
                 dummy.position.set(p.x, p.y, p.z);
