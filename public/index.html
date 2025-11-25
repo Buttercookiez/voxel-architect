@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Vacuum Mode</title>
+    <title>Voxel Architect | Stable Core</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -53,7 +53,6 @@
             max-width: 400px; line-height: 1.4;
         }
         .error-toast { border-left-color: #ff4444 !important; }
-        .retry-toast { border-left-color: #ffaa00 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -63,13 +62,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Stream Vacuum Mode</p>
+        <p>Gemini 2.5 (Stable)</p>
     </div>
 
     <div id="status-toast">Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Blue Castle" placeholder="Type: Red Car..." spellcheck="false">
+        <input type="text" id="input-text" value="Fox" placeholder="Type: Fox, Car, Castle..." spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -81,7 +80,7 @@
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
         const MODEL = "gemini-2.5-flash";
 
-        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 12000, animSpeed: 0.2 };
+        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
@@ -150,15 +149,13 @@
             if (!isPreset) await generateWithAI(txt); else generateInternal();
         }
 
-        function showToast(msg, type = 'success') {
+        function showToast(msg, isError = false) {
             const el = document.getElementById('status-toast');
             el.innerText = msg;
-            el.className = type === 'error' ? 'error-toast' : (type === 'retry' ? 'retry-toast' : '');
+            el.className = isError ? 'error-toast' : '';
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', isError(type) ? 6000 : 3000);
+            setTimeout(() => el.style.display = 'none', isError ? 6000 : 3000);
         }
-        
-        function isError(t) { return t === 'error' || t === 'retry'; }
 
         function generateInternal() {
             let targets = [];
@@ -167,7 +164,7 @@
             processTargets(targets);
         }
 
-        // --- "VACUUM" AI REQUEST ---
+        // --- AI LOGIC ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -178,12 +175,15 @@
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    Build a 3D voxel model of: "${prompt}".
-                    IMPORTANT:
-                    1. Use simple Hex color codes like "#FF0000".
-                    2. Structure format: {"x":0,"y":0,"z":0,"c":"#Hex"}
-                    3. Output specific voxel data objects in a row.
-                    4. No text labels.
+                    You are a specialized 3D Voxel Printing Software.
+                    Create: "${prompt}".
+                    
+                    CRITICAL INSTRUCTIONS:
+                    1. Output strictly valid JSON array.
+                    2. Format: [{"x":0,"y":0,"z":0,"c":"#FF0000"}]
+                    3. Do NOT create text/letters. Build the actual physical object (e.g. wheels on a car, leaves on a tree).
+                    4. Scale: Approx 12x12x12.
+                    5. NO MARKDOWN. NO "\`\`\`". Just the array.
                 `;
 
                 const response = await fetch(url, {
@@ -193,64 +193,68 @@
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
                             temperature: 0.3, 
-                            maxOutputTokens: 8192 // High token limit for complex models
+                            maxOutputTokens: 30000 // MAXIMIZED TOKENS to prevent cutoff
                         },
-                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
                     })
                 });
 
-                if (!response.ok) throw new Error(`API ${response.status}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error?.message || `Error ${response.status}`);
+                }
 
                 const data = await response.json();
                 
-                // Robust Safety/Empty Checks
-                if (!data || !data.candidates || !data.candidates[0]) throw new Error("No candidates returned.");
-                if (!data.candidates[0].content) throw new Error("Content filtered.");
+                // FIX 1: Validate candidate existence before reading [0]
+                if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content) {
+                    throw new Error("AI blocked the request (Empty Candidate).");
+                }
 
                 let text = data.candidates[0].content.parts[0].text;
                 
-                // --- THE VACUUM METHOD ---
-                // Instead of assuming valid JSON Array [ ... ], 
-                // we assume specific objects inside text and extract them using Regex.
-                // This works even if the string is truncated (broken at end).
+                // FIX 2: Robust Cleaner (Handles backticks, text prefix, etc.)
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 
-                const voxelRegex = /\{\s*"?x"?\s*:\s*-?\d+\s*,\s*"?y"?\s*:\s*-?\d+\s*,\s*"?z"?\s*:\s*-?\d+\s*,\s*"?c"?\s*:\s*".*?"\s*\}/g;
+                // Extract pure array
+                const first = text.indexOf('[');
+                const last = text.lastIndexOf(']');
                 
-                const matches = text.match(voxelRegex);
+                if (first === -1 || last === -1) {
+                    console.log("Raw output:", text); // Log for debugging
+                    throw new Error("AI didn't return an array.");
+                }
+                
+                const cleanJson = text.substring(first, last+1);
 
-                if (matches && matches.length > 0) {
-                    
-                    // Convert strings to objects safely
-                    const targets = [];
-                    for (const match of matches) {
-                        try {
-                            // Using a lenient parse
-                            const v = JSON.parse(match);
-                            targets.push({
-                                x: v.x || 0,
-                                y: v.y || 0,
-                                z: v.z || 0,
-                                c: parseInt(((v.c || "#888").replace('#','0x')), 16)
-                            });
-                        } catch(e) { /* Skip bad pixel */ }
-                    }
-
-                    if (targets.length > 0) {
-                        showToast(`Built: ${prompt} (${targets.length} voxels)`);
-                        processTargets(targets);
-                    } else {
-                        throw new Error("Pattern match found no valid data.");
-                    }
-
+                // FIX 3: Try Parse
+                let voxelData;
+                try {
+                    voxelData = JSON.parse(cleanJson);
+                } catch (e) {
+                    console.warn("Bad JSON, attempting internal fallback", e);
+                    throw new Error("JSON Syntax Error (Model output was messy)");
+                }
+                
+                if (Array.isArray(voxelData) && voxelData.length > 0) {
+                    const targets = voxelData.map(v => ({
+                        x: parseInt(v.x)||0, y: parseInt(v.y)||0, z: parseInt(v.z)||0,
+                        c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
+                    }));
+                    showToast(`Built: ${prompt}`);
+                    processTargets(targets);
                 } else {
-                    // If regex fails, dump text for user debug in prompt logs (optional)
-                    console.warn("AI RAW OUTPUT:", text);
-                    throw new Error("AI spoke text, not code.");
+                    throw new Error("Array empty or invalid.");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Fail: ${e.message}`, 'retry');
+                showToast(`Error: ${e.message}`, true);
                 generateInternal();
             } finally {
                 loader.style.display = 'none';
@@ -305,6 +309,7 @@
             controls.update();
             const count = Math.min(particles.length, CONFIG.maxParticles);
             mesh.count = count;
+            
             const G=-0.05, F=0.95; 
 
             for(let i=0; i<count; i++) {
