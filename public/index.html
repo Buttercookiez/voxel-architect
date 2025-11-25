@@ -76,11 +76,10 @@
     </div>
 
     <script>
-        const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
+        const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE"; // Ensure this key is valid
         const MODEL = "gemini-2.5-flash";
 
-        // --- SLOW ANIMATION CONFIG ---
-        // animSpeed lowered from 0.2 to 0.03 for very slow floating
+        // --- CONFIG ---
         const CONFIG = { bg: 0xe0e5ec, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 12000, animSpeed: 0.03 };
         const P = { RAW: 0xcfd8dc };
 
@@ -89,10 +88,13 @@
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(CONFIG.bg);
-            scene.fog = new THREE.Fog(CONFIG.bg, 30, 120);
+            
+            // --- FIX: FOG REDUCED ---
+            // Changed from (30, 120) to (60, 300) to push fog back
+            scene.fog = new THREE.Fog(CONFIG.bg, 60, 300);
             
             camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 2000);
-            camera.position.set(35, 25, 35); // Adjusted camera for better angle
+            camera.position.set(35, 25, 35);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -104,10 +106,10 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.autoRotate = true;
-            controls.autoRotateSpeed = 0.8; // Slower idle spin
+            controls.autoRotateSpeed = 0.8;
             controls.enableDamping = true;
 
-            // Cinematic Lighting
+            // Lighting
             const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
             const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.4);
             keyLight.position.set(20, 50, 20);
@@ -116,7 +118,7 @@
             keyLight.shadow.mapSize.height = 4096;
             scene.add(hemi); scene.add(keyLight);
             
-            // Shadow Floor
+            // Floor
             const planeGeo = new THREE.PlaneGeometry(300, 300);
             const planeMat = new THREE.ShadowMaterial({ opacity: 0.15 });
             const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -141,7 +143,7 @@
             document.getElementById('btn-gen').onclick = handleGenerate;
             document.getElementById('btn-break').onclick = shatter;
 
-            generateInternal('Block');
+            generateInternal();
             animate();
         }
 
@@ -178,15 +180,15 @@
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    You are a 3D Voxel Artist.
-                    User wants: "${prompt}".
+                    You are a 3D Voxel Architect. 
+                    Create a voxel representation of: "${prompt}".
                     
-                    Instructions:
-                    1. Return raw JSON Array ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
-                    2. No text labels. Build the OBJECT.
-                    3. DO NOT SWAP AXES. Y is Up.
-                    4. Use varied, vibrant colors.
-                    5. Max dimensions 16x16x16.
+                    Rules:
+                    1. Output ONLY a JSON Array. No markdown, no text.
+                    2. Format: [{"x":0,"y":0,"z":0,"c":"#FF0000"}]
+                    3. Y is height (vertical).
+                    4. Keep it under 800 voxels for speed.
+                    5. Use vibrant, varied hex colors.
                 `;
 
                 const response = await fetch(url, {
@@ -195,51 +197,53 @@
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
-                            temperature: 0.3, 
-                            maxOutputTokens: 30000 // High limit for complex models
-                        },
-                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+                            temperature: 0.3,
+                            maxOutputTokens: 10000,
+                            // --- FIX: ENFORCE JSON MODE ---
+                            responseMimeType: "application/json"
+                        }
                     })
                 });
 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error?.message || "API Error");
-                }
+                if (!response.ok) throw new Error("API Error: " + response.status);
 
                 const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("Empty AI response.");
+                if (!data.candidates || !data.candidates[0].content) throw new Error("No content");
 
                 let text = data.candidates[0].content.parts[0].text;
+
+                // --- FIX: ROBUST CLEANING ---
+                // Remove markdown backticks
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 
+                // Find the array brackets to ignore any preamble text
                 const first = text.indexOf('[');
                 const last = text.lastIndexOf(']');
+                if (first > -1 && last > -1) {
+                    text = text.substring(first, last + 1);
+                }
                 
-                if (first === -1 || last === -1) throw new Error("AI data corrupted.");
-                text = text.substring(first, last+1);
+                // Fix Trailing commas which break JSON.parse
+                text = text.replace(/,\s*]/g, "]");
 
-                let voxelData = JSON.parse(text);
+                const voxelData = JSON.parse(text);
                 
                 if (Array.isArray(voxelData) && voxelData.length > 0) {
                     const targets = voxelData.map(v => ({
-                        // --- FIX FOR SIDEWAYS: ENSURE Y IS UP ---
-                        // Gemini often uses Y as vertical correctly, but if it flips, swap here.
-                        // Current standard: Three.js Y=Up.
                         x: parseInt(v.x)||0, 
-                        y: parseInt(v.y)||0,  // Y is height
-                        z: parseInt(v.z)||0,  // Z is depth
+                        y: parseInt(v.y)||0,
+                        z: parseInt(v.z)||0,
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
                     showToast(`Generated: ${prompt}`);
                     processTargets(targets);
                 } else {
-                    throw new Error("Empty data array.");
+                    throw new Error("Invalid Data");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Error: ${e.message}`, true);
+                showToast(`Error: ${e.message.substring(0,20)}...`, true);
                 generateInternal();
             } finally {
                 loader.style.display = 'none';
@@ -256,7 +260,7 @@
             // Map targets to World Coordinates
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; // +5 height
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; 
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
@@ -275,9 +279,6 @@
                 if(i < targets.length) {
                     p.target = targets[i];
                     p.state = 'FLYING';
-                    
-                    // SLOW SEQUENCE: Height based delay
-                    // Multiply by 10 makes it take much longer to start rising
                     p.delay = (targets[i].y * 15) + Math.random()*20; 
                 } else {
                     p.state = 'FLOOR';
@@ -305,8 +306,7 @@
             
             mesh.count = Math.min(particles.length, CONFIG.maxParticles);
             
-            // Physics settings
-            const G = -0.03; // Slower gravity
+            const G = -0.03; 
             const F = 0.95; 
 
             for(let i=0; i<mesh.count; i++) {
@@ -315,52 +315,35 @@
                 if(p.state==='FLYING') {
                     if(p.delay > 0) { 
                         p.delay--; 
-                        // Slight floor vibration while waiting
                         if(p.y < CONFIG.floorY+2) { p.rx += 0.05; }
                     } 
                     else {
-                        // Interpolation to target (Magnetic Fly)
                         const dx = p.target.wx - p.x;
                         const dy = p.target.wy - p.y;
                         const dz = p.target.wz - p.z;
                         
-                        // Move towards target slowly (Lerp)
                         p.x += dx * CONFIG.animSpeed;
                         p.y += dy * CONFIG.animSpeed;
                         p.z += dz * CONFIG.animSpeed;
-                        
-                        p.rx *= 0.9; // Dampen rotation
+                        p.rx *= 0.9; 
 
-                        // Check if arrived
                         const dist = Math.abs(dx)+Math.abs(dy)+Math.abs(dz);
                         if(dist < 0.1) {
                             p.state='ASSEMBLED'; 
-                            // Snap perfectly
                             p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; 
                             p.c=p.target.c; p.rx=0;
                         } else {
-                            // Change color to target mid-flight for effect
                             p.c=p.target.c; 
                         }
                     }
                 } 
                 else if(p.state==='ASSEMBLED') {
-                    // Lock position
                     p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
                 } 
                 else if(p.state==='FALLING') {
-                    p.vy += G; 
-                    p.x += p.vx; 
-                    p.y += p.vy; 
-                    p.z += p.vz; 
-                    p.rx += p.vrx;
-                    
-                    // Bounce off floor
+                    p.vy += G; p.x += p.vx; p.y += p.vy; p.z += p.vz; p.rx += p.vrx;
                     if(p.y < CONFIG.floorY+0.5) { 
-                        p.y = CONFIG.floorY+0.5; 
-                        p.vy *= -0.6; 
-                        p.vx *= F; 
-                        p.vz *= F; 
+                        p.y = CONFIG.floorY+0.5; p.vy *= -0.6; p.vx *= F; p.vz *= F; 
                         if(Math.abs(p.vy) < 0.1) p.state='FLOOR'; 
                     }
                 } 
