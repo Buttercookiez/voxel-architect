@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Diagnostic Fix</title>
+    <title>Voxel Architect | Brute Force</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -43,15 +43,16 @@
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* ERROR TOAST - VISIBLE */
+        /* TOAST NOTIFICATION */
         #status-toast {
             position: absolute; top: 20px; right: 20px; 
             background: #111; color: #fff; font-family: monospace; font-size: 12px;
-            padding: 15px; border-radius: 8px; z-index: 999; display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 400px; border-left: 4px solid #44ff44;
+            padding: 15px; border-radius: 8px; z-index: 200; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 350px; border-left: 4px solid #44ff44;
             white-space: pre-wrap; word-wrap: break-word;
         }
         .error-toast { border-left-color: #ff4444 !important; background: #220000 !important; }
+        .warn-toast { border-left-color: #ffaa00 !important; background: #221a00 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -61,7 +62,7 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Diagnostic Mode</p>
+        <p>Auto-Connection Mode</p>
     </div>
 
     <div id="status-toast">Initializing...</div>
@@ -147,13 +148,12 @@
             if (!isPreset) await generateWithAI(txt); else generateInternal(txt);
         }
 
-        function showToast(msg, isError = false) {
+        function showToast(msg, type = 'success') {
             const el = document.getElementById('status-toast');
             el.innerText = msg;
-            el.className = isError ? 'error-toast' : '';
+            el.className = type === 'error' ? 'error-toast' : (type === 'warn' ? 'warn-toast' : '');
             el.style.display = 'block';
-            // Don't auto-hide errors so you can read them
-            if(!isError) setTimeout(() => el.style.display = 'none', 4000);
+            if(type !== 'error') setTimeout(() => el.style.display = 'none', 4000);
         }
 
         function generateInternal(type) {
@@ -163,85 +163,111 @@
             processTargets(targets);
         }
 
-        // --- DIAGNOSTIC AI REQUEST ---
+        // --- BRUTE FORCE AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
             loader.style.display = 'block';
             btnSpan.style.display = 'none';
 
-            try {
-                // Standard Stable Model
-                const modelName = "gemini-1.5-flash"; 
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
+            // List of models to try in order if one fails
+            const MODEL_CANDIDATES = [
+                "gemini-1.5-flash-002", // Specific version (New)
+                "gemini-1.5-flash-001", // Specific version (Older)
+                "gemini-1.5-flash",     // Generic Alias
+                "gemini-1.5-pro",       // Pro model
+                "gemini-pro"            // Legacy model
+            ];
+
+            let success = false;
+            let lastError = "";
+
+            for(let i=0; i<MODEL_CANDIDATES.length; i++) {
+                const modelName = MODEL_CANDIDATES[i];
                 
-                const systemPrompt = `
-                    You are a Voxel Generator.
-                    Create a JSON array of voxels for: "${prompt}".
-                    Rules:
-                    1. Build the OBJECT, NOT TEXT.
-                    2. JSON ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
-                    3. Size 12x12x12.
-                `;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: systemPrompt }] }],
-                        generationConfig: { 
-                            temperature: 0.4, 
-                            maxOutputTokens: 2000
-                        },
-                        // DISABLE SAFETY FILTERS to prevent blocks
-                        safetySettings: [
-                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ]
-                    })
-                });
-
-                if (!response.ok) {
-                    // EXTRACT REAL ERROR MESSAGE
-                    const errData = await response.json();
-                    const errMsg = errData.error?.message || response.statusText;
-                    throw new Error(`API Error (${response.status}): ${errMsg}`);
-                }
-
-                const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("No content returned (Safety or Quota).");
-
-                let text = data.candidates[0].content.parts[0].text;
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const first = text.indexOf('[');
-                const last = text.lastIndexOf(']');
-                if(first !== -1 && last !== -1) text = text.substring(first, last+1);
-
-                const voxelData = JSON.parse(text);
-                
-                if(Array.isArray(voxelData)) {
-                    const targets = voxelData.map(v => ({
-                        x: v.x||0, y: v.y||0, z: v.z||0,
-                        c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
-                    }));
-                    if(targets.length === 0) throw new Error("AI returned empty model.");
+                try {
+                    // console.log(`Trying model: ${modelName}...`);
                     
-                    showToast(`Built: ${prompt}`);
-                    processTargets(targets);
-                } else {
-                    throw new Error("AI returned invalid JSON.");
-                }
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
+                    
+                    const systemPrompt = `
+                        Build 3D object: "${prompt}".
+                        Rules:
+                        1. Build PHYSICAL OBJECT (not text).
+                        2. JSON ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
+                        3. Size 12x12x12.
+                    `;
 
-            } catch (e) {
-                console.error(e);
-                showToast(`FAILED: ${e.message}`, true);
-                generateInternal("block"); 
-            } finally {
-                loader.style.display = 'none';
-                btnSpan.style.display = 'block';
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: systemPrompt }] }],
+                            generationConfig: { 
+                                temperature: 0.4, 
+                                maxOutputTokens: 2000
+                            },
+                            safetySettings: [
+                                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                            ]
+                        })
+                    });
+
+                    if (!response.ok) {
+                        // If 404 (Not Found), loop to next model
+                        if(response.status === 404) throw new Error("Model Not Found");
+                        // If 429 (Quota), stop loop
+                        if(response.status === 429) throw new Error("Quota Exceeded");
+                        
+                        const errData = await response.json();
+                        throw new Error(errData.error?.message || response.statusText);
+                    }
+
+                    const data = await response.json();
+                    if (!data.candidates || !data.candidates[0].content) throw new Error("No content.");
+
+                    let text = data.candidates[0].content.parts[0].text;
+                    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const first = text.indexOf('[');
+                    const last = text.lastIndexOf(']');
+                    if(first !== -1 && last !== -1) text = text.substring(first, last+1);
+
+                    const voxelData = JSON.parse(text);
+                    
+                    if(Array.isArray(voxelData)) {
+                        const targets = voxelData.map(v => ({
+                            x: v.x||0, y: v.y||0, z: v.z||0,
+                            c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
+                        }));
+                        
+                        if(targets.length === 0) throw new Error("Empty model.");
+                        
+                        showToast(`Success with ${modelName}`);
+                        processTargets(targets);
+                        success = true;
+                        break; // Stop the loop, we found a working model!
+                    } else {
+                        throw new Error("Invalid JSON.");
+                    }
+
+                } catch (e) {
+                    lastError = e.message;
+                    // If it was just "Model Not Found", try the next one silently.
+                    // If it was Quota Exceeded, stop trying.
+                    if(e.message.includes("Quota")) break;
+                }
             }
+
+            if (!success) {
+                showToast(`Failed: ${lastError}`, 'error');
+                generateInternal("block"); 
+            }
+            
+            loader.style.display = 'none';
+            btnSpan.style.display = 'block';
         }
 
         function processTargets(targets) {
