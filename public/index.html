@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Gemini 2.5 Fixed</title>
+    <title>Voxel Architect | JSON Mode</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -50,7 +50,7 @@
             background: #1a1a1a; color: #fff; font-family: monospace; font-size: 13px;
             padding: 16px 20px; border-radius: 12px; z-index: 200; display: none;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2); border-left: 4px solid #00ff00;
-            max-width: 400px; line-height: 1.4;
+            max-width: 350px; line-height: 1.4;
         }
         .error-toast { border-left-color: #ff4444 !important; }
     </style>
@@ -62,13 +62,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Powered by Gemini 2.5 Flash</p>
+        <p>Structure Mode (No Text)</p>
     </div>
 
     <div id="status-toast">Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Block" placeholder="Try: Red Apple" spellcheck="false">
+        <input type="text" id="input-text" value="Fox" placeholder="Type: Fox, Car, Tree..." spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -78,7 +78,7 @@
 
     <script>
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
-        const TARGET_MODEL = "gemini-2.5-flash"; // Proven working in diagnostics
+        const MODEL = "gemini-2.5-flash"; // The one that worked in your test
 
         const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
         const P = { RAW: 0xcfd8dc };
@@ -110,8 +110,7 @@
             const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.2);
             keyLight.position.set(20, 40, 20);
             keyLight.castShadow = true;
-            keyLight.shadow.mapSize.width = 2048; 
-            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.mapSize.width = 2048; keyLight.shadow.mapSize.height = 2048;
             scene.add(hemi); scene.add(keyLight);
             
             const planeGeo = new THREE.PlaneGeometry(200, 200);
@@ -138,13 +137,14 @@
             document.getElementById('btn-gen').onclick = handleGenerate;
             document.getElementById('btn-break').onclick = shatter;
 
-            generateInternal();
+            generateInternal('Block');
             animate();
         }
 
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
+            // Presets save time, otherwise AI
             const isPreset = ['block','cube'].some(k => txt.toLowerCase() === k);
             if (!isPreset) await generateWithAI(txt); else generateInternal();
         }
@@ -164,7 +164,7 @@
             processTargets(targets);
         }
 
-        // --- AI GENERATION ---
+        // --- JSON MODE AI ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -172,18 +172,17 @@
             btnSpan.style.display = 'none';
 
             try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${TARGET_MODEL}:generateContent?key=${API_KEY}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    Role: You are a specialized 3D Voxel Printing Software.
-                    Goal: Create a 3D voxel model of "${prompt}".
+                    Task: Create a 3D voxel object of "${prompt}".
                     
-                    STRICT RULES:
-                    1. NO TEXT. Do NOT build letters. If prompt is "Car", build a physical car.
-                    2. NO MARKDOWN. Output ONLY valid JSON array.
-                    3. JSON FORMAT: [{"x":0,"y":0,"z":0,"c":"#FF0000"}]
-                    4. SCALE: Approx 12x12x12.
-                    5. COLOR: Use hex colors representing the object.
+                    Strict Guidelines:
+                    1. OBJECT ONLY. No text labels. If user types "Apple", build an apple shape.
+                    2. Output format is a flat JSON array of coordinates and colors.
+                    3. Example: [{"x":0, "y":0, "z":0, "c":"#FF0000"}, {"x":1, "y":0, "z":0, "c":"#00FF00"}]
+                    4. Use Hex colors.
+                    5. Scale: approx 14x14x14.
                 `;
 
                 const response = await fetch(url, {
@@ -193,65 +192,39 @@
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
                             temperature: 0.4, 
-                            maxOutputTokens: 5000 // Reduced for stability
-                        },
-                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+                            maxOutputTokens: 8000,
+                            responseMimeType: "application/json" // <--- FORCE CLEAN JSON
+                        }
                     })
                 });
 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error?.message || "Connection Refused");
-                }
+                if (!response.ok) throw new Error(`API ${response.status}`);
 
                 const data = await response.json();
                 
-                if (!data.candidates || !data.candidates[0].content) {
-                    throw new Error("AI blocked content or returned empty.");
-                }
+                if (!data.candidates || !data.candidates[0].content) throw new Error("No Content");
 
                 let text = data.candidates[0].content.parts[0].text;
                 
-                // === AGGRESSIVE CLEANER ===
-                // 1. Find first bracket [
-                const firstChar = text.indexOf('[');
-                if (firstChar === -1) throw new Error("AI response wasn't a list.");
-                
-                // 2. Find last bracket ]
-                const lastChar = text.lastIndexOf(']');
-                if (lastChar === -1) throw new Error("Incomplete AI response.");
-
-                // 3. Slice only the JSON part
-                const cleanedText = text.substring(firstChar, lastChar + 1);
-
-                let voxelData;
-                try {
-                    voxelData = JSON.parse(cleanedText);
-                } catch (parseErr) {
-                    console.error("Bad JSON String:", cleanedText);
-                    throw new Error("JSON Syntax Error (AI output corrupted)");
-                }
+                // Parse
+                const voxelData = JSON.parse(text);
                 
                 if (Array.isArray(voxelData) && voxelData.length > 0) {
-                    // Transform Hex string to Int for Three.js
                     const targets = voxelData.map(v => ({
-                        x: parseInt(v.x)||0, 
-                        y: parseInt(v.y)||0, 
-                        z: parseInt(v.z)||0,
+                        x: v.x||0, y: v.y||0, z: v.z||0,
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
                     
-                    showToast(`Success: ${prompt}`);
+                    showToast(`Built: ${prompt}`);
                     processTargets(targets);
                 } else {
-                    throw new Error("Received valid JSON, but empty data.");
+                    throw new Error("Data empty or invalid format.");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Failed: ${e.message}`, true);
-                // Fallback to a procedural box so screen isn't empty
-                generateInternal(); 
+                showToast(`Retry... Error: ${e.message}`, true);
+                generateInternal();
             } finally {
                 loader.style.display = 'none';
                 btnSpan.style.display = 'block';
@@ -265,7 +238,7 @@
 
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5;
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; 
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
@@ -295,10 +268,7 @@
             particles.forEach(p => {
                 if(p.state === 'ASSEMBLED' || p.state === 'FLYING') {
                     p.state = 'FALLING';
-                    p.vx=(Math.random()-0.5)*1.5;
-                    p.vy=Math.random()*1.5; 
-                    p.vz=(Math.random()-0.5)*1.5;
-                    p.vrx=(Math.random()-0.5)*0.5;
+                    p.vx=(Math.random()-0.5)*1.5; p.vy=Math.random()*1.5; p.vz=(Math.random()-0.5)*1.5; p.vrx=(Math.random()-0.5)*0.5;
                 }
             });
         }
@@ -308,38 +278,26 @@
             controls.update();
             const count = Math.min(particles.length, CONFIG.maxParticles);
             mesh.count = count;
-            
             const G=-0.05, F=0.95; 
 
             for(let i=0; i<count; i++) {
                 const p = particles[i];
                 if(p.state==='FLYING') {
-                    if(p.delay>0) {
-                        p.delay--;
-                        if(p.y < CONFIG.floorY+2) p.rx += 0.1; 
-                    } else {
+                    if(p.delay>0) { p.delay--; if(p.y < CONFIG.floorY+2) p.rx += 0.2; } 
+                    else {
                         const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
                         p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed;
-                        p.rx*=0.7; 
+                        p.rx*=0.7;
                         if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1) {
-                            p.state='ASSEMBLED'; 
-                            p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; 
-                            p.c=p.target.c; p.rx=0;
-                        } else {
-                            p.c=p.target.c; 
-                        }
+                            p.state='ASSEMBLED'; p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; p.c=p.target.c; p.rx=0;
+                        } else p.c=p.target.c;
                     }
                 } else if(p.state==='ASSEMBLED') {
                     p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
                 } else if(p.state==='FALLING') {
                     p.vy+=G; p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.rx+=p.vrx;
-                    if(p.y<CONFIG.floorY+0.5) { 
-                        p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; 
-                        if(Math.abs(p.vy)<0.1) p.state='FLOOR'; 
-                    }
-                } else if(p.state==='FLOOR') {
-                    p.y=CONFIG.floorY+0.5;
-                }
+                    if(p.y<CONFIG.floorY+0.5) { p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; if(Math.abs(p.vy)<0.1)p.state='FLOOR'; }
+                } else if(p.state==='FLOOR') { p.y=CONFIG.floorY+0.5; }
 
                 dummy.position.set(p.x, p.y, p.z);
                 dummy.rotation.set(p.rx, p.rx, p.rx);
