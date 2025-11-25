@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Instant Mode</title>
+    <title>Voxel Architect | Diagnostic Fix</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -43,13 +43,15 @@
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* ERROR TOAST - VISIBLE */
         #status-toast {
             position: absolute; top: 20px; right: 20px; 
             background: #111; color: #fff; font-family: monospace; font-size: 12px;
-            padding: 12px 16px; border-radius: 8px; z-index: 200; display: none;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 350px; border-left: 4px solid #44ff44;
+            padding: 15px; border-radius: 8px; z-index: 999; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 400px; border-left: 4px solid #44ff44;
+            white-space: pre-wrap; word-wrap: break-word;
         }
-        .error-toast { border-left-color: #ff4444 !important; }
+        .error-toast { border-left-color: #ff4444 !important; background: #220000 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -59,13 +61,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Flash Mode</p>
+        <p>Diagnostic Mode</p>
     </div>
 
     <div id="status-toast">Initializing...</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Block" placeholder="Type object (e.g. Car)" spellcheck="false">
+        <input type="text" id="input-text" value="Block" placeholder="Type object..." spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -76,15 +78,8 @@
     <script>
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
 
-        // --- TURBO CONFIGURATION (Animation speeds kept high) ---
-        const CONFIG = { 
-            bg: 0xe8ebee, 
-            floorY: -12, 
-            voxelSize: 1, 
-            gap: 0.02, 
-            maxParticles: 8000, 
-            animSpeed: 0.2 // Turbo Speed
-        };
+        // --- CONFIG ---
+        const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
         const P = { RAW: 0xcfd8dc };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
@@ -157,7 +152,8 @@
             el.innerText = msg;
             el.className = isError ? 'error-toast' : '';
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 4000);
+            // Don't auto-hide errors so you can read them
+            if(!isError) setTimeout(() => el.style.display = 'none', 4000);
         }
 
         function generateInternal(type) {
@@ -167,7 +163,7 @@
             processTargets(targets);
         }
 
-        // --- OPTIMIZED AI REQUEST ---
+        // --- DIAGNOSTIC AI REQUEST ---
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
@@ -175,15 +171,15 @@
             btnSpan.style.display = 'none';
 
             try {
-                // Direct Call to Flash (Fastest Model)
+                // Standard Stable Model
                 const modelName = "gemini-1.5-flash"; 
-                
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    Build 3D object: "${prompt}".
-                    RULES:
-                    1. Build the physical object (e.g. if "Car", build a car).
+                    You are a Voxel Generator.
+                    Create a JSON array of voxels for: "${prompt}".
+                    Rules:
+                    1. Build the OBJECT, NOT TEXT.
                     2. JSON ONLY: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
                     3. Size 12x12x12.
                 `;
@@ -195,15 +191,27 @@
                         contents: [{ parts: [{ text: systemPrompt }] }],
                         generationConfig: { 
                             temperature: 0.4, 
-                            maxOutputTokens: 2000 // Lower tokens = Faster response
-                        }
+                            maxOutputTokens: 2000
+                        },
+                        // DISABLE SAFETY FILTERS to prevent blocks
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
                     })
                 });
 
-                if (!response.ok) throw new Error("Network/API Error");
+                if (!response.ok) {
+                    // EXTRACT REAL ERROR MESSAGE
+                    const errData = await response.json();
+                    const errMsg = errData.error?.message || response.statusText;
+                    throw new Error(`API Error (${response.status}): ${errMsg}`);
+                }
 
                 const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content) throw new Error("No data");
+                if (!data.candidates || !data.candidates[0].content) throw new Error("No content returned (Safety or Quota).");
 
                 let text = data.candidates[0].content.parts[0].text;
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -218,17 +226,17 @@
                         x: v.x||0, y: v.y||0, z: v.z||0,
                         c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
                     }));
-                    if(targets.length === 0) throw new Error("Empty");
+                    if(targets.length === 0) throw new Error("AI returned empty model.");
                     
-                    showToast(`Done!`);
+                    showToast(`Built: ${prompt}`);
                     processTargets(targets);
                 } else {
-                    throw new Error("Bad JSON");
+                    throw new Error("AI returned invalid JSON.");
                 }
 
             } catch (e) {
                 console.error(e);
-                showToast(`Error: Retrying internal`, true);
+                showToast(`FAILED: ${e.message}`, true);
                 generateInternal("block"); 
             } finally {
                 loader.style.display = 'none';
@@ -260,7 +268,6 @@
                 if(i < targets.length) {
                     p.target = targets[i];
                     p.state = 'FLYING';
-                    // Fast multiplier
                     p.delay = (targets[i].y * 1) + Math.random()*5; 
                 } else {
                     p.state = 'FLOOR';
