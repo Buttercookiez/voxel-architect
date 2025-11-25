@@ -3,371 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Fail-Safe</title>
-    
+    <title>Voxel Architect | Raw AI Connection</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-
     <style>
         :root { --bg: #e8ebee; --panel: rgba(255, 255, 255, 0.98); --text: #1a1a1a; --accent: #111; }
         body { margin: 0; overflow: hidden; background-color: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
-        
         #header { position: absolute; top: 40px; left: 40px; pointer-events: none; z-index: 10; }
         h1 { margin: 0; font-size: 28px; font-weight: 800; text-transform: uppercase; color: var(--accent); }
         p { margin: 4px 0 0; font-size: 14px; color: #666; font-weight: 500; }
-
-        #ui-container {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-            background: var(--panel); backdrop-filter: blur(20px); border-radius: 18px;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.1); z-index: 100;
-        }
         
-        input {
-            border: none; background: rgba(0,0,0,0.05); padding: 14px 18px; border-radius: 10px;
-            font-size: 16px; font-weight: 600; width: 220px; outline: none;
-        }
-        input:focus { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
-
-        button {
-            border: none; cursor: pointer; padding: 14px 24px; border-radius: 10px;
-            font-size: 14px; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; gap: 8px;
-        }
+        /* UI Controls */
+        #ui-container { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel); backdrop-filter: blur(20px); border-radius: 18px; box-shadow: 0 15px 50px rgba(0,0,0,0.1); z-index: 100; }
+        input { border: none; background: rgba(0,0,0,0.05); padding: 14px 18px; border-radius: 10px; font-size: 16px; font-weight: 600; width: 220px; outline: none; }
+        button { border: none; cursor: pointer; padding: 14px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
         #btn-gen { background-color: var(--accent); color: white; }
-        #btn-gen:hover { transform: scale(1.05); }
         #btn-break { background-color: transparent; color: var(--text); border: 1px solid transparent; }
-        
-        .loader {
-            width: 14px; height: 14px; border: 2px solid #fff; border-bottom-color: transparent;
-            border-radius: 50%; display: none; animation: rotation 0.5s linear infinite;
-        }
+        .loader { width: 14px; height: 14px; border: 2px solid #fff; border-bottom-color: transparent; border-radius: 50%; display: none; animation: rotation 0.5s linear infinite; }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        #status-toast {
-            position: absolute; top: 20px; right: 20px; 
-            background: #111; color: #fff; font-family: monospace; font-size: 12px;
-            padding: 15px; border-radius: 8px; z-index: 200; display: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 350px; border-left: 4px solid #44ff44;
-            white-space: pre-wrap; word-wrap: break-word;
+        /* Debug Screen Overlay */
+        #error-console {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80%; max-width: 600px; background: rgba(20, 0, 0, 0.95); border: 2px solid #ff4444;
+            color: #ffaaaa; padding: 30px; border-radius: 16px; font-family: monospace; z-index: 999;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.2); white-space: pre-wrap; overflow-y: auto; max-height: 80vh;
         }
-        .warn-toast { border-left-color: #ffaa00 !important; background: #221a00 !important; }
+        #error-console h3 { color: #ff4444; margin-top: 0; text-transform: uppercase; }
+        .close-btn { position: absolute; top: 10px; right: 10px; color: white; cursor: pointer; background: #333; padding: 5px 10px; border-radius: 4px; }
     </style>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
-    <div id="header">
-        <h1>Voxel Architect</h1>
-        <p>Intelligent Hybrid Mode</p>
+    <div id="header"><h1>Voxel Architect</h1><p>Raw Connection Mode</p></div>
+    
+    <!-- ERROR BOX -->
+    <div id="error-console">
+        <div class="close-btn" onclick="this.parentElement.style.display='none'">X</div>
+        <h3>Google API Error</h3>
+        <div id="error-text">Waiting...</div>
     </div>
 
-    <div id="status-toast">System Ready</div>
-
     <div id="ui-container">
-        <input type="text" id="input-text" value="Fox" placeholder="Type object (Car, Tree, Fox...)" spellcheck="false">
-        <button id="btn-gen">
-            <span>Create</span>
-            <div class="loader" id="ai-loader"></div>
-        </button>
+        <input type="text" id="input-text" value="Car" placeholder="Enter prompt..." spellcheck="false">
+        <button id="btn-gen"><span>Generate</span><div class="loader" id="ai-loader"></div></button>
         <button id="btn-break">Shatter</button>
     </div>
 
     <script>
-        const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
-
-        // --- CONFIG ---
+        const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE"; 
         const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
-        
-        // --- PRESETS PALETTE ---
-        const P = { 
-            RAW: 0xcfd8dc, WOOD: 0x5d4037, GREEN: 0x2e7d32, RED: 0xe53935, 
-            WHITE: 0xf5f5f5, DARK: 0x212121, ORANGE: 0xff9800, GOLD: 0xffb300,
-            BLUE: 0x1e88e5, GREY: 0x757575, TIRE: 0x1a1a1a 
-        };
-
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
 
         function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(CONFIG.bg);
-            scene.fog = new THREE.Fog(CONFIG.bg, 30, 100);
-            
-            camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.set(30, 25, 30);
-
+            scene = new THREE.Scene(); scene.background = new THREE.Color(CONFIG.bg); scene.fog = new THREE.Fog(CONFIG.bg, 30, 100);
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 1000); camera.position.set(30, 25, 30);
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.outputEncoding = THREE.sRGBEncoding;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping;
             document.body.appendChild(renderer.domElement);
-
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = 2.0;
-            controls.enableDamping = true;
-
-            const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.65);
-            const keyLight = new THREE.DirectionalLight(0xfff0dd, 1.2);
-            keyLight.position.set(20, 40, 20);
-            keyLight.castShadow = true;
-            keyLight.shadow.mapSize.width = 2048; keyLight.shadow.mapSize.height = 2048;
-            scene.add(hemi); scene.add(keyLight);
+            controls = new THREE.OrbitControls(camera, renderer.domElement); controls.autoRotate = true; controls.autoRotateSpeed = 2.0; controls.enableDamping = true;
             
-            const planeGeo = new THREE.PlaneGeometry(200, 200);
-            const planeMat = new THREE.ShadowMaterial({ opacity: 0.15 });
-            const plane = new THREE.Mesh(planeGeo, planeMat);
-            plane.rotation.x = -Math.PI / 2;
-            plane.position.y = CONFIG.floorY;
-            plane.receiveShadow = true;
-            scene.add(plane);
+            const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.65);
+            const key = new THREE.DirectionalLight(0xfff0dd, 1.2); key.position.set(20,40,20); key.castShadow=true; key.shadow.mapSize.width=2048; key.shadow.mapSize.height=2048;
+            scene.add(hemi); scene.add(key);
+            const pg = new THREE.PlaneGeometry(200,200); const pm = new THREE.ShadowMaterial({opacity:0.15});
+            const p = new THREE.Mesh(pg,pm); p.rotation.x=-Math.PI/2; p.position.y=CONFIG.floorY; p.receiveShadow=true; scene.add(p);
+            
+            const g = new THREE.BoxGeometry(0.98,0.98,0.98); const m = new THREE.MeshStandardMaterial({roughness:0.4, metalness:0.1});
+            mesh = new THREE.InstancedMesh(g,m,CONFIG.maxParticles); mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
 
-            const g = new THREE.BoxGeometry(0.98, 0.98, 0.98);
-            const m = new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.1 });
-            mesh = new THREE.InstancedMesh(g, m, CONFIG.maxParticles);
-            mesh.castShadow = true; mesh.receiveShadow = true;
-            scene.add(mesh);
-
-            const inputField = document.getElementById('input-text');
-            inputField.addEventListener('focus', () => controls.enabled = false);
-            inputField.addEventListener('blur', () => controls.enabled = true);
-            inputField.addEventListener('keydown', (e) => e.stopPropagation());
-            inputField.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleGenerate(); });
-
-            window.addEventListener('resize', onResize);
-            document.getElementById('btn-gen').onclick = handleGenerate;
+            const inp = document.getElementById('input-text');
+            inp.addEventListener('keydown',e=>e.stopPropagation());
+            inp.addEventListener('keypress',e=>{if(e.key==='Enter') generateWithAI()});
+            
+            document.getElementById('btn-gen').onclick = generateWithAI;
             document.getElementById('btn-break').onclick = shatter;
-
-            // Start with procedural
-            runProceduralGenerator('Fox'); 
+            window.addEventListener('resize', ()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight)});
+            
+            generateEmptyBox();
             animate();
         }
 
-        async function handleGenerate() {
-            const txt = document.getElementById('input-text').value.trim();
-            if(!txt) return;
-            // Try AI First
-            await generateWithAI(txt); 
-        }
-
-        function showToast(msg, type = 'success') {
-            const el = document.getElementById('status-toast');
-            el.innerText = msg;
-            el.className = type === 'warn' ? 'warn-toast' : '';
+        function showError(msg, rawJson) {
+            const el = document.getElementById('error-console');
+            const txt = document.getElementById('error-text');
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 4000);
+            txt.innerText = `${msg}\n\n--- GOOGLE RESPONSE ---\n${JSON.stringify(rawJson, null, 2)}`;
         }
 
-        // --- HYBRID GENERATOR LOGIC ---
+        function generateEmptyBox() {
+            let t = []; 
+            for(let x=-3; x<3; x++) for(let y=0; y<3; y++) for(let z=-3; z<3; z++) t.push({x,y,z,c:0xcfd8dc});
+            processTargets(t);
+        }
 
-        // 1. TRY AI (Gemini Flash 1.5)
-        async function generateWithAI(prompt) {
+        // --- REAL CONNECTION LOGIC ---
+        async function generateWithAI() {
+            const prompt = document.getElementById('input-text').value.trim();
+            if(!prompt) return;
+
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
-            loader.style.display = 'block';
-            btnSpan.style.display = 'none';
+            loader.style.display='block'; btnSpan.style.display='none';
+            document.getElementById('error-console').style.display='none';
 
             try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+                // FORCE FLASH 1.5
+                const modelName = "gemini-1.5-flash"; 
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
                 
                 const systemPrompt = `
-                    You are a Voxel Modeler. Create: "${prompt}".
-                    RULES: 
-                    1. Output ONLY JSON array: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
-                    2. Create the OBJECT, not letters.
-                    3. Limit 12x12x12 size.
+                    Task: Generate a 3D Voxel Model of "${prompt}".
+                    Format: Returns a JSON array: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
+                    Strict Constraints: 
+                    1. Do NOT build letters/text. Build the PHYSICAL object. 
+                    2. Size between 10x10x10 and 16x16x16. 
+                    3. Return ONLY valid raw JSON. No markdown.
                 `;
+
+                console.log("Connecting to:", url);
 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: systemPrompt }] }],
-                        generationConfig: { temperature: 0.4, maxOutputTokens: 3000 },
-                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+                        generationConfig: { temperature: 0.3, maxOutputTokens: 2500 },
+                        safetySettings: [
+                            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
                     })
                 });
 
-                if (!response.ok) throw new Error(`API Error ${response.status}`);
+                // If HTTP Error, extract body and Show User
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(()=>({ error: "Could not parse error body" }));
+                    showError(`HTTP Error: ${response.status} (${response.statusText})`, errorBody);
+                    throw new Error("Stopped due to HTTP error");
+                }
 
                 const data = await response.json();
-                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!text) throw new Error("No data");
-
-                // Extract JSON
-                const start = text.indexOf('[');
-                const end = text.lastIndexOf(']');
-                if (start === -1) throw new Error("No JSON");
-                const jsonStr = text.substring(start, end + 1);
                 
-                const voxelData = JSON.parse(jsonStr);
-                if (!Array.isArray(voxelData) || voxelData.length === 0) throw new Error("Empty Data");
-
-                const targets = voxelData.map(v => ({
-                    x: v.x||0, y: v.y||0, z: v.z||0,
-                    c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
-                }));
-
-                showToast(`AI Generated: ${prompt}`);
-                processTargets(targets);
-
-            } catch (e) {
-                console.warn(e);
-                // FALLBACK TRIGGERED
-                showToast(`AI Failed - Using Backup for: ${prompt}`, 'warn');
-                runProceduralGenerator(prompt);
-            } finally {
-                loader.style.display = 'none';
-                btnSpan.style.display = 'block';
-            }
-        }
-
-        // 2. PROCEDURAL ENGINE (Backup Logic)
-        function runProceduralGenerator(input) {
-            const t = input.toLowerCase();
-            let targets = [];
-            
-            const add = (x,y,z,c) => targets.push({x,y,z,c});
-            const addRect = (x,y,z,w,h,d,c) => { for(let i=0;i<w;i++) for(let j=0;j<h;j++) for(let k=0;k<d;k++) add(x+i,y+j,z+k,c); };
-
-            if (t.includes('car') || t.includes('vehicle')) {
-                addRect(-4,1,-2,8,2,4, P.RED); // Chassis
-                addRect(-2,3,-2,4,2,4, P.BLUE); // Cabin
-                addRect(-3,0,-2,2,2,1, P.TIRE); addRect(2,0,-2,2,2,1, P.TIRE); // Wheels
-                addRect(-3,0,2,2,2,1, P.TIRE);  addRect(2,0,2,2,2,1, P.TIRE);
-            } 
-            else if (t.includes('fox') || t.includes('dog') || t.includes('cat')) {
-                addRect(-2,0,-3,4,3,6, P.ORANGE); // Body
-                addRect(-3,0,-3,1,4,1, P.ORANGE); addRect(2,0,-3,1,4,1, P.ORANGE); // Back Legs
-                addRect(-3,0,2,1,4,1, P.ORANGE);  addRect(2,0,2,1,4,1, P.ORANGE); // Front Legs
-                addRect(-2,4,3,4,3,3, P.ORANGE); // Head
-                addRect(-1,5,6,2,1,2, P.DARK); // Nose
-                addRect(0,4,-6,1,2,3, P.WHITE); // Tail Tip
-            }
-            else if (t.includes('tree')) {
-                addRect(0,0,0,2,6,2, P.WOOD); // Trunk
-                for(let i=0; i<200; i++) { // Leaves
-                    const lx = (Math.random()-0.5)*8;
-                    const ly = 6 + Math.random()*6;
-                    const lz = (Math.random()-0.5)*8;
-                    if(lx*lx+ly*ly+lz*lz < 60) add(Math.floor(lx), Math.floor(ly), Math.floor(lz), P.GREEN);
+                // Check validity
+                if (!data.candidates || !data.candidates[0].content) {
+                    showError("Valid HTTP 200, but Empty Response. (Likely Safety Block)", data);
+                    throw new Error("Empty Content");
                 }
-            }
-            else if (t.includes('robot')) {
-                addRect(-2,0,-1,1,4,2, P.GREY); addRect(1,0,-1,1,4,2, P.GREY); // Legs
-                addRect(-2,4,-2,4,5,4, P.BLUE); // Torso
-                addRect(-4,5,-1,1,4,2, P.GREY); addRect(3,5,-1,1,4,2, P.GREY); // Arms
-                addRect(-2,9,-2,4,3,4, P.GREY); // Head
-                add(-1,10,2, P.RED); add(2,10,2, P.RED); // Eyes
-            }
-            else if (t.includes('sword')) {
-                addRect(0,2,0,1,10,1, P.RAW); // Blade
-                addRect(-2,2,0,5,1,1, P.GOLD); // Guard
-                addRect(0,0,0,1,2,1, P.WOOD); // Handle
-            }
-            else {
-                // Default Cube if unknown
-                addRect(-3,0,-3,6,6,6, P.RAW);
-            }
 
-            processTargets(targets);
-        }
-
-        // --- PHYSICS CORE ---
-        function processTargets(targets) {
-            // Center Logic
-            let mx=0, my=0, mz=0;
-            targets.forEach(t => { mx+=t.x; my+=t.y; mz+=t.z; });
-            const cx = mx/targets.length, cy = my/targets.length, cz = mz/targets.length;
-
-            targets.forEach(t => {
-                t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5;
-                t.wz = (t.z - cz) * CONFIG.voxelSize;
-            });
-
-            if(particles.length === 0) {
-                for(let i=0; i<CONFIG.maxParticles; i++) {
-                    particles.push({
-                        x: (Math.random()-0.5)*20, y: CONFIG.floorY+0.5, z: (Math.random()-0.5)*20,
-                        rx: Math.random()*Math.PI, c: 0xcfd8dc, state: 'FLOOR', vx:0, vy:0, vz:0
-                    });
+                let text = data.candidates[0].content.parts[0].text;
+                
+                // Clean JSON formatting
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const first = text.indexOf('[');
+                const last = text.lastIndexOf(']');
+                
+                if(first === -1 || last === -1) {
+                    showError("AI Replied, but did not return JSON array.", { raw_text: text });
+                    throw new Error("Bad JSON");
                 }
-            }
 
-            particles.forEach((p, i) => {
-                if(i < targets.length) {
-                    p.target = targets[i];
-                    p.state = 'FLYING';
-                    p.delay = (targets[i].y * 1) + Math.random()*5; 
+                text = text.substring(first, last+1);
+                
+                let voxelData;
+                try {
+                    voxelData = JSON.parse(text);
+                } catch(e) {
+                    showError("JSON Parsing Failed.", { error: e.message, raw_text: text });
+                    throw new Error("JSON Parse Fail");
+                }
+
+                if(Array.isArray(voxelData) && voxelData.length > 0) {
+                    const targets = voxelData.map(v => ({
+                        x: v.x||0, y: v.y||0, z: v.z||0,
+                        c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
+                    }));
+                    processTargets(targets);
                 } else {
-                    p.state = 'FLOOR';
+                    showError("AI returned empty array.", { data: voxelData });
                 }
-            });
-            controls.autoRotate = true;
-        }
 
-        function shatter() {
-            controls.autoRotate = false;
-            particles.forEach(p => {
-                if(p.state === 'ASSEMBLED' || p.state === 'FLYING') {
-                    p.state = 'FALLING';
-                    p.vx=(Math.random()-0.5)*1.5;
-                    p.vy=Math.random()*1.5; 
-                    p.vz=(Math.random()-0.5)*1.5;
-                    p.vrx=(Math.random()-0.5)*0.5;
-                }
-            });
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            const count = Math.min(particles.length, CONFIG.maxParticles);
-            mesh.count = count;
-            const G=-0.05, F=0.95; 
-
-            for(let i=0; i<count; i++) {
-                const p = particles[i];
-                if(p.state==='FLYING') {
-                    if(p.delay>0) {
-                        p.delay--;
-                        if(p.y < CONFIG.floorY+2) p.rx += 0.2;
-                    } else {
-                        const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
-                        p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed;
-                        p.rx*=0.7;
-                        if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1) {
-                            p.state='ASSEMBLED'; p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz; p.c=p.target.c; p.rx=0;
-                        } else p.c=p.target.c;
-                    }
-                } else if(p.state==='ASSEMBLED') {
-                    p.x=p.target.wx; p.y=p.target.wy; p.z=p.target.wz;
-                } else if(p.state==='FALLING') {
-                    p.vy+=G; p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.rx+=p.vrx;
-                    if(p.y<CONFIG.floorY+0.5) { p.y=CONFIG.floorY+0.5; p.vy*=-0.6; p.vx*=F; p.vz*=F; if(Math.abs(p.vy)<0.1)p.state='FLOOR'; }
-                } else if(p.state==='FLOOR') p.y=CONFIG.floorY+0.5;
-
-                dummy.position.set(p.x, p.y, p.z);
-                dummy.rotation.set(p.rx, p.rx, p.rx);
-                dummy.updateMatrix();
-                mesh.setMatrixAt(i, dummy.matrix);
-                mesh.setColorAt(i, colorHelper.setHex(p.c));
+            } catch(e) {
+                console.error("Stopped:", e);
+            } finally {
+                loader.style.display='none'; btnSpan.style.display='block';
             }
-            mesh.instanceMatrix.needsUpdate = true;
-            mesh.instanceColor.needsUpdate = true;
-            renderer.render(scene, camera);
         }
 
-        function onResize() {
-            camera.aspect = window.innerWidth/window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        // --- ANIMATION CORE ---
+        function processTargets(t){
+            let mx=0,my=0,mz=0; t.forEach(o=>{mx+=o.x;my+=o.y;mz+=o.z}); const cx=mx/t.length,cy=my/t.length,cz=mz/t.length;
+            t.forEach(o=>{o.wx=(o.x-cx)*CONFIG.voxelSize;o.wy=(o.y-cy)*CONFIG.voxelSize+5;o.wz=(o.z-cz)*CONFIG.voxelSize});
+            if(particles.length===0) for(let i=0;i<CONFIG.maxParticles;i++) particles.push({x:(Math.random()-.5)*20,y:CONFIG.floorY+.5,z:(Math.random()-.5)*20,rx:0,c:0xcfd8dc,state:'FLOOR',vx:0,vy:0,vz:0});
+            particles.forEach((p,i)=>{if(i<t.length){p.target=t[i];p.state='FLYING';p.delay=(t[i].y*1)+Math.random()*5}else p.state='FLOOR'});
+            controls.autoRotate=true;
         }
-
+        function shatter(){controls.autoRotate=false;particles.forEach(p=>{if(p.state==='ASSEMBLED'||p.state==='FLYING'){p.state='FALLING';p.vx=(Math.random()-.5)*1.5;p.vy=Math.random()*1.5;p.vz=(Math.random()-.5)*1.5;p.vrx=(Math.random()-.5)*.5}})}
+        function animate(){
+            requestAnimationFrame(animate);controls.update();mesh.count=Math.min(particles.length,CONFIG.maxParticles);
+            for(let i=0;i<mesh.count;i++){
+                const p=particles[i];
+                if(p.state==='FLYING'){
+                    if(p.delay>0){p.delay--;if(p.y<CONFIG.floorY+2)p.rx+=0.2}
+                    else{
+                        const dx=p.target.wx-p.x, dy=p.target.wy-p.y, dz=p.target.wz-p.z;
+                        p.x+=dx*CONFIG.animSpeed; p.y+=dy*CONFIG.animSpeed; p.z+=dz*CONFIG.animSpeed; p.rx*=0.7;
+                        if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)<0.1){p.state='ASSEMBLED';p.x=p.target.wx;p.y=p.target.wy;p.z=p.target.wz;p.c=p.target.c;p.rx=0}else p.c=p.target.c
+                    }
+                } else if(p.state==='ASSEMBLED'){p.x=p.target.wx;p.y=p.target.wy;p.z=p.target.wz}
+                else if(p.state==='FALLING'){p.vy+=-0.05;p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.rx+=p.vrx;if(p.y<CONFIG.floorY+0.5){p.y=CONFIG.floorY+0.5;p.vy*=-0.6;p.vx*=0.95;p.vz*=0.95;if(Math.abs(p.vy)<0.1)p.state='FLOOR'}}
+                else if(p.state==='FLOOR')p.y=CONFIG.floorY+0.5;
+                dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(p.rx,p.rx,p.rx);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);mesh.setColorAt(i,colorHelper.setHex(p.c));
+            }
+            mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;renderer.render(scene,camera);
+        }
         init();
     </script>
 </body>
