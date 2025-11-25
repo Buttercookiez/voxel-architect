@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Architect | Auto-Fixing</title>
+    <title>Voxel Architect | Fail-Safe</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -43,7 +43,6 @@
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* NOTIFICATIONS */
         #status-toast {
             position: absolute; top: 20px; right: 20px; 
             background: #111; color: #fff; font-family: monospace; font-size: 12px;
@@ -51,8 +50,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 350px; border-left: 4px solid #44ff44;
             white-space: pre-wrap; word-wrap: break-word;
         }
-        .error-toast { border-left-color: #ff4444 !important; background: #220000 !important; }
-        .retry-toast { border-left-color: #ffaa00 !important; }
+        .warn-toast { border-left-color: #ffaa00 !important; background: #221a00 !important; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -62,13 +60,13 @@
 
     <div id="header">
         <h1>Voxel Architect</h1>
-        <p>Auto-Correcting AI</p>
+        <p>Intelligent Hybrid Mode</p>
     </div>
 
     <div id="status-toast">System Ready</div>
 
     <div id="ui-container">
-        <input type="text" id="input-text" value="Orange Fox" placeholder="Type object (e.g. Burger)" spellcheck="false">
+        <input type="text" id="input-text" value="Fox" placeholder="Type object (Car, Tree, Fox...)" spellcheck="false">
         <button id="btn-gen">
             <span>Create</span>
             <div class="loader" id="ai-loader"></div>
@@ -77,12 +75,17 @@
     </div>
 
     <script>
-        // YOUR API KEY (Hardcoded for you)
         const API_KEY = "AIzaSyD5Q3y40BPiwtSUzBTRoU2n2CgIiqWrYpE";
 
         // --- CONFIG ---
         const CONFIG = { bg: 0xe8ebee, floorY: -12, voxelSize: 1, gap: 0.02, maxParticles: 8000, animSpeed: 0.2 };
-        const P = { RAW: 0xcfd8dc };
+        
+        // --- PRESETS PALETTE ---
+        const P = { 
+            RAW: 0xcfd8dc, WOOD: 0x5d4037, GREEN: 0x2e7d32, RED: 0xe53935, 
+            WHITE: 0xf5f5f5, DARK: 0x212121, ORANGE: 0xff9800, GOLD: 0xffb300,
+            BLUE: 0x1e88e5, GREY: 0x757575, TIRE: 0x1a1a1a 
+        };
 
         let scene, camera, renderer, controls, mesh, particles = [], dummy = new THREE.Object3D(), colorHelper = new THREE.Color();
 
@@ -138,169 +141,154 @@
             document.getElementById('btn-gen').onclick = handleGenerate;
             document.getElementById('btn-break').onclick = shatter;
 
-            generateInternal('Block');
+            // Start with procedural
+            runProceduralGenerator('Fox'); 
             animate();
         }
 
         async function handleGenerate() {
             const txt = document.getElementById('input-text').value.trim();
             if(!txt) return;
-            // Quick checks for hardcoded
-            const isPreset = ['block','cube','box'].some(k => txt.toLowerCase() === k);
-            if (!isPreset) await generateWithAI(txt); else generateInternal(txt);
+            // Try AI First
+            await generateWithAI(txt); 
         }
 
         function showToast(msg, type = 'success') {
             const el = document.getElementById('status-toast');
             el.innerText = msg;
-            el.className = type === 'error' ? 'error-toast' : (type === 'retry' ? 'retry-toast' : '');
+            el.className = type === 'warn' ? 'warn-toast' : '';
             el.style.display = 'block';
-            if(type === 'success') setTimeout(() => el.style.display = 'none', 4000);
+            setTimeout(() => el.style.display = 'none', 4000);
         }
 
-        function generateInternal(type) {
-            let targets = [];
-            const add = (x,y,z,c) => targets.push({x,y,z,c});
-            for(let x=-6; x<6; x++) for(let y=0; y<12; y++) for(let z=-6; z<6; z++) add(x,y,z, P.RAW);
-            processTargets(targets);
-        }
+        // --- HYBRID GENERATOR LOGIC ---
 
-        // --- AUTO-FIXING AI REQUEST ---
+        // 1. TRY AI (Gemini Flash 1.5)
         async function generateWithAI(prompt) {
             const loader = document.getElementById('ai-loader');
             const btnSpan = document.querySelector('#btn-gen span');
             loader.style.display = 'block';
             btnSpan.style.display = 'none';
 
-            // LIST OF ALL POSSIBLE MODEL NAMES (Prioritizing stability)
-            const MODEL_CANDIDATES = [
-                "gemini-1.5-flash-latest", // Attempt Newest
-                "gemini-1.5-flash-002",    // Attempt Specific V2
-                "gemini-1.5-flash-001",    // Attempt Specific V1
-                "gemini-1.5-flash",        // Attempt Generic Alias
-                "gemini-1.5-pro-latest",
-                "gemini-pro"               // Final Legacy fallback
-            ];
-
-            let success = false;
-            let lastError = "";
-
-            for(let i=0; i<MODEL_CANDIDATES.length; i++) {
-                const currentModel = MODEL_CANDIDATES[i];
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
                 
-                try {
-                    // Don't spam toast, just log console
-                    console.log(`Attempting connection via: ${currentModel}`);
-                    
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${API_KEY}`;
-                    
-                    const systemPrompt = `
-                        You are a 3D Voxel Artist.
-                        User wants: "${prompt}".
-                        
-                        CRITICAL INSTRUCTION:
-                        DO NOT create text or letters.
-                        Create the ACTUAL PHYSICAL OBJECT/CREATURE.
-                        
-                        Format: ONLY a raw JSON Array of voxels.
-                        Schema: [{"x": int, "y": int, "z": int, "c": "hexString"}]
-                        Constraints: Approx 12x12x12 blocks. High detail.
-                    `;
+                const systemPrompt = `
+                    You are a Voxel Modeler. Create: "${prompt}".
+                    RULES: 
+                    1. Output ONLY JSON array: [{"x":0,"y":0,"z":0,"c":"#FF0000"}].
+                    2. Create the OBJECT, not letters.
+                    3. Limit 12x12x12 size.
+                `;
 
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: systemPrompt }] }],
-                            generationConfig: { 
-                                temperature: 0.4, 
-                                maxOutputTokens: 2000 
-                            },
-                            safetySettings: [
-                                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                            ]
-                        })
-                    });
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: systemPrompt }] }],
+                        generationConfig: { temperature: 0.4, maxOutputTokens: 3000 },
+                        safetySettings: [{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" }]
+                    })
+                });
 
-                    // Handle Errors
-                    if (!response.ok) {
-                        const status = response.status;
-                        if (status === 404) {
-                            // Model version mismatch, throw specific error to continue loop
-                            throw new Error("VERSION_MISMATCH"); 
-                        } else if (status === 429) {
-                            throw new Error("QUOTA_EXCEEDED");
-                        }
-                        const errData = await response.json();
-                        throw new Error(errData.error?.message || "API Error");
-                    }
+                if (!response.ok) throw new Error(`API Error ${response.status}`);
 
-                    const data = await response.json();
-                    if (!data.candidates || !data.candidates[0].content) throw new Error("EMPTY_RESPONSE");
+                const data = await response.json();
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("No data");
 
-                    // Parse Response
-                    let text = data.candidates[0].content.parts[0].text;
-                    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                    
-                    // Robust Extractor
-                    const first = text.indexOf('[');
-                    const last = text.lastIndexOf(']');
-                    if(first === -1 || last === -1) throw new Error("INVALID_JSON_FORMAT");
-                    text = text.substring(first, last+1);
+                // Extract JSON
+                const start = text.indexOf('[');
+                const end = text.lastIndexOf(']');
+                if (start === -1) throw new Error("No JSON");
+                const jsonStr = text.substring(start, end + 1);
+                
+                const voxelData = JSON.parse(jsonStr);
+                if (!Array.isArray(voxelData) || voxelData.length === 0) throw new Error("Empty Data");
 
-                    const voxelData = JSON.parse(text);
-                    
-                    if(Array.isArray(voxelData) && voxelData.length > 0) {
-                        // Data Validation
-                        const targets = voxelData.map(v => ({
-                            x: v.x||0, y: v.y||0, z: v.z||0,
-                            c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
-                        }));
-                        
-                        showToast(`Built with: ${currentModel}`, 'success');
-                        processTargets(targets);
-                        success = true;
-                        break; // EXIT LOOP - WE ARE DONE
-                    } else {
-                        throw new Error("EMPTY_DATA_ARRAY");
-                    }
+                const targets = voxelData.map(v => ({
+                    x: v.x||0, y: v.y||0, z: v.z||0,
+                    c: parseInt((v.c||"#888888").replace('#', '0x'), 16)
+                }));
 
-                } catch (e) {
-                    lastError = e.message;
-                    // If version mismatch, continue loop silentlhy
-                    if(e.message === "VERSION_MISMATCH") continue; 
-                    
-                    console.warn(`Failed on ${currentModel}: ${e.message}`);
-                    if(e.message === "QUOTA_EXCEEDED") break; // Don't retry if we have no quota
-                }
+                showToast(`AI Generated: ${prompt}`);
+                processTargets(targets);
+
+            } catch (e) {
+                console.warn(e);
+                // FALLBACK TRIGGERED
+                showToast(`AI Failed - Using Backup for: ${prompt}`, 'warn');
+                runProceduralGenerator(prompt);
+            } finally {
+                loader.style.display = 'none';
+                btnSpan.style.display = 'block';
             }
-
-            if (!success) {
-                showToast(`Failed: ${lastError}`, 'error');
-                // Immediate Fallback so screen isn't black
-                generateInternal("block"); 
-            }
-            
-            loader.style.display = 'none';
-            btnSpan.style.display = 'block';
         }
 
+        // 2. PROCEDURAL ENGINE (Backup Logic)
+        function runProceduralGenerator(input) {
+            const t = input.toLowerCase();
+            let targets = [];
+            
+            const add = (x,y,z,c) => targets.push({x,y,z,c});
+            const addRect = (x,y,z,w,h,d,c) => { for(let i=0;i<w;i++) for(let j=0;j<h;j++) for(let k=0;k<d;k++) add(x+i,y+j,z+k,c); };
+
+            if (t.includes('car') || t.includes('vehicle')) {
+                addRect(-4,1,-2,8,2,4, P.RED); // Chassis
+                addRect(-2,3,-2,4,2,4, P.BLUE); // Cabin
+                addRect(-3,0,-2,2,2,1, P.TIRE); addRect(2,0,-2,2,2,1, P.TIRE); // Wheels
+                addRect(-3,0,2,2,2,1, P.TIRE);  addRect(2,0,2,2,2,1, P.TIRE);
+            } 
+            else if (t.includes('fox') || t.includes('dog') || t.includes('cat')) {
+                addRect(-2,0,-3,4,3,6, P.ORANGE); // Body
+                addRect(-3,0,-3,1,4,1, P.ORANGE); addRect(2,0,-3,1,4,1, P.ORANGE); // Back Legs
+                addRect(-3,0,2,1,4,1, P.ORANGE);  addRect(2,0,2,1,4,1, P.ORANGE); // Front Legs
+                addRect(-2,4,3,4,3,3, P.ORANGE); // Head
+                addRect(-1,5,6,2,1,2, P.DARK); // Nose
+                addRect(0,4,-6,1,2,3, P.WHITE); // Tail Tip
+            }
+            else if (t.includes('tree')) {
+                addRect(0,0,0,2,6,2, P.WOOD); // Trunk
+                for(let i=0; i<200; i++) { // Leaves
+                    const lx = (Math.random()-0.5)*8;
+                    const ly = 6 + Math.random()*6;
+                    const lz = (Math.random()-0.5)*8;
+                    if(lx*lx+ly*ly+lz*lz < 60) add(Math.floor(lx), Math.floor(ly), Math.floor(lz), P.GREEN);
+                }
+            }
+            else if (t.includes('robot')) {
+                addRect(-2,0,-1,1,4,2, P.GREY); addRect(1,0,-1,1,4,2, P.GREY); // Legs
+                addRect(-2,4,-2,4,5,4, P.BLUE); // Torso
+                addRect(-4,5,-1,1,4,2, P.GREY); addRect(3,5,-1,1,4,2, P.GREY); // Arms
+                addRect(-2,9,-2,4,3,4, P.GREY); // Head
+                add(-1,10,2, P.RED); add(2,10,2, P.RED); // Eyes
+            }
+            else if (t.includes('sword')) {
+                addRect(0,2,0,1,10,1, P.RAW); // Blade
+                addRect(-2,2,0,5,1,1, P.GOLD); // Guard
+                addRect(0,0,0,1,2,1, P.WOOD); // Handle
+            }
+            else {
+                // Default Cube if unknown
+                addRect(-3,0,-3,6,6,6, P.RAW);
+            }
+
+            processTargets(targets);
+        }
+
+        // --- PHYSICS CORE ---
         function processTargets(targets) {
-            // Calculate Center
+            // Center Logic
             let mx=0, my=0, mz=0;
             targets.forEach(t => { mx+=t.x; my+=t.y; mz+=t.z; });
             const cx = mx/targets.length, cy = my/targets.length, cz = mz/targets.length;
 
             targets.forEach(t => {
                 t.wx = (t.x - cx) * CONFIG.voxelSize;
-                t.wy = (t.y - cy) * CONFIG.voxelSize + 5; // Lift slightly above floor
+                t.wy = (t.y - cy) * CONFIG.voxelSize + 5;
                 t.wz = (t.z - cz) * CONFIG.voxelSize;
             });
 
-            // Pool Management
             if(particles.length === 0) {
                 for(let i=0; i<CONFIG.maxParticles; i++) {
                     particles.push({
@@ -310,7 +298,6 @@
                 }
             }
 
-            // Assign
             particles.forEach((p, i) => {
                 if(i < targets.length) {
                     p.target = targets[i];
